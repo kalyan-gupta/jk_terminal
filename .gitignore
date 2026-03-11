@@ -1,0 +1,22 @@
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Django specifics
+db.sqlite3
+*.log
+
+# Local environment
+.env
+venv/
+env/
+
+# IDE folders
+.idea/
+.vscode/
+
+# Custom rules
+trading_platform/credentials.py
+trades/scrip_data/
