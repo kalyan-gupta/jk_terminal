@@ -77,6 +77,110 @@ def refresh_scrip_cache(request):
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
+def search_scrip_cache(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Only GET requests are allowed'}, status=405)
+
+    try:
+        search_term = request.GET.get('q', '').strip()
+        exchange = request.GET.get('exchange', 'all')  # all, nse_cm, bse_cm, nse_fo, bse_fo
+        inst_type = request.GET.get('inst_type', 'all')  # all, stock, option, future
+
+        if not search_term or len(search_term) < 2:
+            return JsonResponse({'error': 'Search term must be at least 2 characters.'}, status=400)
+
+        with _duckdb_lock:
+            try:
+                row_count = _duckdb_connection.execute('SELECT COUNT(*) FROM all_market_data').fetchone()[0]
+                if row_count == 0:
+                    return JsonResponse({
+                        'error': 'Scrip cache is empty. Please refresh the scrip cache and try again.',
+                        'action': 'refresh_cache'
+                    }, status=400)
+            except Exception:
+                return JsonResponse({
+                    'error': 'Scrip cache table not found. Please refresh the scrip cache and try again.',
+                    'action': 'refresh_cache'
+                }, status=400)
+
+            # Build filter conditions
+            filters = []
+            if exchange != 'all':
+                filters.append(f"pExchSeg = '{exchange}'")
+
+            if inst_type != 'all':
+                if inst_type == 'stock':
+                    filters.append("(pInstType IS NULL OR pInstType = '')")
+                elif inst_type == 'option':
+                    filters.append("(pInstType IN ('OPTSTK', 'OPTIDX'))")
+                elif inst_type == 'future':
+                    filters.append("(pInstType IN ('FUTIDX', 'FUTSTK'))")
+
+            where_clause = " AND ".join(filters) if filters else "1=1"
+
+            # Build elastic search: make it tighter by requiring more matches
+            search_terms = search_term.lower().split()
+            
+            # For options: construct search to match pScripRefKey pattern (e.g., NIFTY2050013APR26CE)
+            # For stocks: match symbol name or description
+            search_conditions = []
+            
+            # Escape single quotes in search terms
+            safe_terms = [term.replace("'", "''") for term in search_terms]
+            
+            # Build conditions for options: try to match pScripRefKey with concatenated terms
+            # Options format: SYMBOL+STRIKE+EXPIRYDATE+OPTIONTYPE (e.g., NIFTY2050013APR26CE)
+            options_conditions = []
+            for term in safe_terms:
+                options_conditions.append(f"LOWER(COALESCE(pScripRefKey, '')) LIKE '%{term}%'")
+            options_search = " AND ".join(options_conditions) if options_conditions else "1=1"
+            
+            # Build conditions for stocks: match symbol name OR description (more lenient)
+            stock_conditions = []
+            for term in safe_terms:
+                stock_conditions.append(f"""
+                    (LOWER(COALESCE(pSymbolName, '')) LIKE '%{term}%'
+                    OR LOWER(COALESCE(pDesc, '')) LIKE '%{term}%')
+                """)
+            stock_search = " OR ".join(stock_conditions) if stock_conditions else "1=1"
+            
+            # Combine: prioritize option search if looking for options, otherwise use stock search
+            if inst_type == 'option':
+                final_search = f"({options_search})"
+            elif inst_type == 'future':
+                final_search = f"({options_search})"
+            else:
+                # For stocks or all, use stock search (looser)
+                final_search = f"({stock_search})"
+
+            query = f"""
+                SELECT 
+                    pSymbol,
+                    pExchSeg,
+                    pSymbolName,
+                    pOptionType,
+                    pInstType,
+                    CAST(COALESCE("dStrikePrice;", 0) AS DECIMAL) / 100 as dStrikePrice,
+                    pScripRefKey,
+                    pDesc
+                FROM all_market_data
+                WHERE {where_clause} AND {final_search}
+                LIMIT 50
+            """
+
+            results = _duckdb_connection.execute(query).fetchall()
+            columns = ['pSymbol', 'pExchSeg', 'pSymbolName', 'pOptionType', 'pInstType', 'dStrikePrice', 'pScripRefKey', 'pDesc']
+            
+            data = [dict(zip(columns, row)) for row in results]
+            
+            return JsonResponse({
+                'results': data,
+                'count': len(data),
+                'total_available': min(50, len(data))
+            })
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 def place_trade_ajax(request):
     if request.method != 'POST':
