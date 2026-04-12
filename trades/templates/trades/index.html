@@ -191,80 +191,10 @@
             </div>
         </div>
 
-        <!-- Place a Trade Card -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h2 class="h5 mb-0"><i class="bi bi-plus-circle-dotted me-2"></i> Place New Order</h2>
-            </div>
-            <div class="card-body">
-                <form id="trade-form" method="post" action="{% url 'place_trade_ajax' %}">
-                    {% csrf_token %}
-                    <div class="row g-3 align-items-end">
-                        <div class="col-md-3">
-                            <label for="exchange_segment" class="form-label">Exchange</label>
-                            <select id="exchange_segment" name="exchange_segment" class="form-select">
-                                <option value="nse_cm" selected>NSE</option>
-                                <option value="bse_cm">BSE</option>
-                                <option value="nse_fo">NSE F&O</option>
-                                <option value="bse_fo">BSE F&O</option>
-                                <option value="cde_fo">NSE CUR F&O</option>
-                                <option value="mcx_fo">MCX</option>
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label for="instrument_type" class="form-label">Instrument</label>
-                            <select id="instrument_type" name="instrument_type" class="form-select">
-                                <option value="all" selected>All</option>
-                                <option value="stock">Stock (EQ)</option>
-                                <option value="etf">ETF</option>
-                                <option value="options">Options (F&O)</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3 position-relative">
-                            <label for="instrument_token" class="form-label">Symbol</label>
-                            <input type="text" class="form-control" id="instrument_token" name="instrument_token" required autocomplete="off" placeholder="e.g., RELIANCE">
-                            <div id="symbol-results" class="dropdown-menu w-100" style="max-height: 300px; overflow-y: auto;"></div>
-                        </div>
-                        <div class="col-md-2">
-                            <label for="product_type" class="form-label">Product</label>
-                            <select id="product_type" name="product_type" class="form-select">
-                                <option value="MIS">MIS (Intraday)</option>
-                                <option value="CNC">CNC (Delivery)</option>
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label for="transaction_type" class="form-label">Type</label>
-                            <select id="transaction_type" name="transaction_type" class="form-select">
-                                <option value="B">Buy</option>
-                                <option value="S">Sell</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="row g-3 align-items-end mt-2">
-                        <div class="col-md">
-                            <label for="quantity" class="form-label">Quantity</label>
-                            <input type="number" class="form-control" id="quantity" name="quantity" required min="1" placeholder="1">
-                        </div>
-                        <div class="col-md">
-                            <label for="price" class="form-label">Price</label>
-                            <input type="number" step="0.05" class="form-control" id="price" name="price" required placeholder="0.00">
-                        </div>
-                        <div class="col-md">
-                            <label for="total_value" class="form-label">Total Value</label>
-                            <input type="text" class="form-control" id="total_value" disabled readonly placeholder="0.00">
-                        </div>
-                        <div class="col-md-auto">
-                            <button type="submit" id="place-order-btn" class="btn btn-primary w-100"><i class="bi bi-send-fill me-1"></i> Place Order</button>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-
         <!-- Search Scrip Data Card -->
         <div class="card mb-4">
             <div class="card-header">
-                <h2 class="h5 mb-0"><i class="bi bi-search me-2"></i> Search Scrip Data</h2>
+                <h2 class="h5 mb-0"><i class="bi bi-search me-2"></i> Search & Place Order</h2>
             </div>
             <div class="card-body">
                 <div class="row g-3 align-items-end mb-3">
@@ -732,7 +662,6 @@
                 console.error('WebSocket error:', err);
             };
 
-            const tradeForm = document.getElementById('trade-form');
             const notificationArea = document.getElementById('notification-area');
 
             function showNotification(message, type = 'success') {
@@ -751,148 +680,6 @@
                 const toastInstance = new bootstrap.Toast(toast, { delay: 5000 });
                 toastInstance.show();
             }
-
-            if(tradeForm) {
-                const quantityInput = document.getElementById('quantity');
-                const priceInput = document.getElementById('price');
-                const totalValueInput = document.getElementById('total_value');
-                const submitButton = document.getElementById('place-order-btn');
-
-                function calculateTotal() {
-                    const quantity = parseFloat(quantityInput.value) || 0;
-                    const price = parseFloat(priceInput.value) || 0;
-                    const total = quantity * price;
-                    totalValueInput.value = `₹${total.toFixed(2)}`;
-                }
-
-                quantityInput.addEventListener('input', calculateTotal);
-                priceInput.addEventListener('input', calculateTotal);
-                
-                tradeForm.addEventListener('submit', function(e) {
-                    e.preventDefault();
-                    
-                    submitButton.disabled = true;
-                    submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Placing...';
-
-                    const formData = new FormData(tradeForm);
-                    const data = Object.fromEntries(formData.entries());
-                    const csrfToken = data.csrfmiddlewaretoken;
-
-                    fetch(tradeForm.action, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': csrfToken
-                        },
-                        body: JSON.stringify(data)
-                    })
-                    .then(response => response.json())
-                    .then(result => {
-                        if (result.status === 'success') {
-                            showNotification(result.message, 'success');
-                            tradeForm.reset();
-                            calculateTotal();
-                            // Optional: Refresh order book after a short delay
-                            setTimeout(() => window.location.reload(), 1500);
-                        } else {
-                            showNotification(result.message || result.error || 'An unknown error occurred.', 'danger');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        showNotification('A network error occurred. Please try again.', 'danger');
-                    })
-                    .finally(() => {
-                        submitButton.disabled = false;
-                        submitButton.innerHTML = '<i class="bi bi-send-fill me-1"></i> Place Order';
-                    });
-                });
-            }
-
-            const symbolSearchInput = document.getElementById('instrument_token');
-            const symbolResults = document.getElementById('symbol-results');
-            const exchangeSegmentInput = document.getElementById('exchange_segment');
-            const instrumentTypeInput = document.getElementById('instrument_type');
-            let searchTimeout;
-            let isSelecting = false;
-
-            symbolSearchInput.addEventListener('keyup', function() {
-                if (isSelecting) {
-                    isSelecting = false;
-                    return;
-                }
-
-                clearTimeout(searchTimeout);
-                const searchTerm = symbolSearchInput.value;
-                const exchangeSegment = exchangeSegmentInput.value;
-                const instrumentType = instrumentTypeInput.value;
-
-                if (searchTerm.length < 2) {
-                    symbolResults.classList.remove('show');
-                    return;
-                }
-
-                searchTimeout = setTimeout(() => {
-                    fetch(`/search_scrips_ajax/?symbol=${searchTerm}&exchange_segment=${exchangeSegment}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            symbolResults.innerHTML = '';
-                            if (data && data.length > 0) {
-                                const filteredData = data.filter(scrip => {
-                                    if (instrumentType === 'stock') {
-                                        return scrip.pTrdSymbol.endsWith('-EQ');
-                                    } else if (instrumentType === 'etf') {
-                                        return scrip.pSymbolName.includes('ETF') || scrip.pDesc.includes('ETF');
-                                    } else if (instrumentType === 'options') {
-                                        return scrip.pInstType === 'OPTSTK' || scrip.pInstType === 'OPTIDX';
-                                    }
-                                    return true;
-                                });
-
-                                if (filteredData.length > 0) {
-                                    filteredData.forEach(scrip => {
-                                        const item = document.createElement('a');
-                                        item.className = 'dropdown-item';
-                                        item.href = '#';
-                                        item.textContent = `${scrip.pTrdSymbol} (${scrip.pSymbolName})`;
-                                        item.addEventListener('click', function(e) {
-                                            e.preventDefault();
-                                            isSelecting = true;
-                                            symbolSearchInput.value = scrip.pTrdSymbol;
-                                            symbolResults.classList.remove('show');
-                                        });
-                                        symbolResults.appendChild(item);
-                                    });
-                                } else {
-                                    const item = document.createElement('a');
-                                    item.className = 'dropdown-item disabled';
-                                    item.href = '#';
-                                    item.textContent = 'No results found for this filter';
-                                    symbolResults.appendChild(item);
-                                }
-                                symbolResults.classList.add('show');
-                            } else {
-                                const item = document.createElement('a');
-                                item.className = 'dropdown-item disabled';
-                                item.href = '#';
-                                item.textContent = 'No results found';
-                                symbolResults.appendChild(item);
-                                symbolResults.classList.add('show');
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error fetching scrips:', error);
-                            symbolResults.classList.remove('show');
-                        });
-                }, 300); // Debounce for 300ms
-            });
-
-            // Hide results when clicking outside
-            document.addEventListener('click', function(e) {
-                if (!symbolSearchInput.contains(e.target) && !symbolResults.contains(e.target)) {
-                    symbolResults.classList.remove('show');
-                }
-            });
 
             document.getElementById('refresh-scrips').addEventListener('click', function(e) {
                 e.preventDefault();
