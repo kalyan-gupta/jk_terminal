@@ -224,6 +224,31 @@ def place_trade_ajax(request):
         return JsonResponse({'error': f"An unexpected error occurred: {e}"}, status=500)
 
 
+def cancel_order_ajax(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST requests are allowed'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        order_id = data.get('order_id')
+
+        if not order_id:
+            return JsonResponse({'error': 'Order ID is required.'}, status=400)
+
+        api = KotakNeoAPI()
+        api_response = api.cancel_order(order_id)
+        
+        if 'errMsg' in api_response:
+            return JsonResponse({'status': 'error', 'message': api_response['errMsg']}, status=400)
+        
+        return JsonResponse({'status': 'success', 'message': f"Order cancellation requested: {api_response.get('result', 'Success')} - {api_response.get('stat', 'Success')}"})
+
+    except (json.JSONDecodeError, ValueError, TypeError) as e:
+        return JsonResponse({'error': f"Invalid request data: {e}"}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': f"An unexpected error occurred: {e}"}, status=500)
+
+
 def search_scrips_ajax(request):
     if request.method != 'GET':
         return JsonResponse({'error': 'Only GET requests are allowed'}, status=405)
