@@ -153,17 +153,21 @@ class KotakNeoAPI:
             return auth_response
 
         try:
-            order = self.client.place_order(
-                exchange_segment=exchange_segment,
-                product=product,
-                order_type=order_type,
-                quantity=str(quantity), # API might expect string
-                price=str(price), # API might expect string
-                validity=validity,
-                trading_symbol=trading_symbol,
-                transaction_type=transaction_type[0].upper(), # 'B' or 'S'
-                amo=amo
-            )
+            order_params = {
+                'exchange_segment': exchange_segment,
+                'product': product,
+                'order_type': order_type,
+                'quantity': str(quantity),
+                'validity': validity,
+                'trading_symbol': trading_symbol,
+                'transaction_type': transaction_type[0].upper(),  # 'B' or 'S'
+                'amo': amo
+            }
+            
+            # Always include price, set to 0 for market orders
+            order_params['price'] = str(price) if price is not None else '0'
+            
+            order = self.client.place_order(**order_params)
             return order
         except Exception as e:
             logger.error(f"Error placing trade: {e}", exc_info=True)

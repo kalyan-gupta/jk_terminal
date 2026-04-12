@@ -156,14 +156,16 @@ def search_scrip_cache(request):
                     pInstType,
                     CAST(COALESCE("dStrikePrice;", 0) AS DECIMAL) / 100 as dStrikePrice,
                     pScripRefKey,
-                    pDesc
+                    pDesc,
+                    CAST(COALESCE(dTickSize, dTickSize, 0) AS DECIMAL) / 100 as dTickSize,
+                    CAST(COALESCE(lLotSize, 0) AS INTEGER) as lLotSize
                 FROM all_market_data
                 WHERE {where_clause} AND {final_search}
                 LIMIT 50
             """
 
             results = _duckdb_connection.execute(query).fetchall()
-            columns = ['pSymbol', 'pExchSeg', 'pSymbolName', 'pTrdSymbol', 'pOptionType', 'pInstType', 'dStrikePrice', 'pScripRefKey', 'pDesc']
+            columns = ['pSymbol', 'pExchSeg', 'pSymbolName', 'pTrdSymbol', 'pOptionType', 'pInstType', 'dStrikePrice', 'pScripRefKey', 'pDesc', 'dTickSize', 'lLotSize']
             
             data = [dict(zip(columns, row)) for row in results]
             
@@ -184,13 +186,20 @@ def place_trade_ajax(request):
         data = json.loads(request.body)
         instrument_token = data.get('instrument_token')
         quantity = data.get('quantity')
-        price = data.get('price')
+        price = data.get('price')  # Optional for market orders
         transaction_type = data.get('transaction_type')
         exchange_segment = data.get('exchange_segment')
         product_type = data.get('product_type')
+        order_type = data.get('order_type', 'L')  # Default to limit
 
-        if not all([instrument_token, quantity, price, transaction_type, exchange_segment, product_type]):
-            return JsonResponse({'error': 'All trade fields are required.'}, status=400)
+        if not all([instrument_token, quantity, transaction_type, exchange_segment, product_type]):
+            return JsonResponse({'error': 'Required fields are missing.'}, status=400)
+
+        # For market orders, set price to 0
+        if order_type == 'MKT':
+            price = 0
+        elif not price:
+            return JsonResponse({'error': 'Price is required for limit orders.'}, status=400)
 
         api = KotakNeoAPI()
         api_response = api.place_trade(
@@ -199,13 +208,14 @@ def place_trade_ajax(request):
             price=float(price),
             transaction_type=transaction_type,
             exchange_segment=exchange_segment,
-            product=product_type
+            product=product_type,
+            order_type=order_type
         )
 
-        if 'error' in api_response:
-            return JsonResponse({'status': 'error', 'message': api_response['error']}, status=400)
+        if 'errMsg' in api_response:
+            return JsonResponse({'status': 'error', 'message': api_response['errMsg']}, status=400)
         
-        order_id = api_response.get('norenordno', 'N/A')
+        order_id = api_response.get('nOrdNo', 'N/A')
         return JsonResponse({'status': 'success', 'message': f"Trade placed successfully! Order ID: {order_id}", 'data': api_response})
 
     except (json.JSONDecodeError, ValueError, TypeError) as e:
