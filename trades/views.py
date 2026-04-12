@@ -185,6 +185,7 @@ def place_trade_ajax(request):
     try:
         data = json.loads(request.body)
         instrument_token = data.get('instrument_token')
+        trading_symbol = data.get('trading_symbol')
         quantity = data.get('quantity')
         price = data.get('price')  # Optional for market orders
         transaction_type = data.get('transaction_type')
@@ -192,18 +193,40 @@ def place_trade_ajax(request):
         product_type = data.get('product_type')
         order_type = data.get('order_type', 'L')  # Default to limit
 
-        if not all([instrument_token, quantity, transaction_type, exchange_segment, product_type]):
+        if not all([instrument_token, trading_symbol, quantity, transaction_type, exchange_segment, product_type]):
             return JsonResponse({'error': 'Required fields are missing.'}, status=400)
 
-        # For market orders, set price to 0
         if order_type == 'MKT':
             price = 0
-        elif not price:
+        elif price is None or price == '':
             return JsonResponse({'error': 'Price is required for limit orders.'}, status=400)
 
         api = KotakNeoAPI()
+        margin_response = api.margin_required(
+            instrument_token=instrument_token,
+            quantity=quantity,
+            price=0 if order_type == 'MKT' else price,
+            transaction_type=transaction_type,
+            exchange_segment=exchange_segment,
+            product=product_type,
+            order_type=order_type
+        )
+
+        if isinstance(margin_response, dict) and 'error' in margin_response:
+            return JsonResponse({'status': 'error', 'message': f"Margin check failed: {margin_response['error']}"}, status=400)
+
+        margin_data = margin_response.get('data', {}) if isinstance(margin_response, dict) else {}
+        insuf_fund = float(margin_data.get('insufFund', '0') or '0')
+        rms_validated = str(margin_data.get('rmsVldtd', '')).upper()
+
+        if insuf_fund > 0 or rms_validated != 'OK':
+            message = f"Insufficient margin. Required: {margin_data.get('reqdMrgn', '0')}, Available: {margin_data.get('avlMrgn', '0')}."
+            if margin_data.get('insufFund'):
+                message += f" Add ₹{margin_data.get('insufFund')} and try again."
+            return JsonResponse({'status': 'error', 'message': message, 'margin': margin_data}, status=400)
+
         api_response = api.place_trade(
-            trading_symbol=instrument_token,
+            trading_symbol=trading_symbol,
             quantity=int(quantity),
             price=float(price),
             transaction_type=transaction_type,
@@ -217,6 +240,50 @@ def place_trade_ajax(request):
         
         order_id = api_response.get('nOrdNo', 'N/A')
         return JsonResponse({'status': 'success', 'message': f"Trade placed successfully! Order ID: {order_id}", 'data': api_response})
+
+    except (json.JSONDecodeError, ValueError, TypeError) as e:
+        return JsonResponse({'error': f"Invalid request data: {e}"}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': f"An unexpected error occurred: {e}"}, status=500)
+
+
+def check_margin_ajax(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST requests are allowed'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        instrument_token = data.get('instrument_token')
+        quantity = data.get('quantity')
+        price = data.get('price')
+        transaction_type = data.get('transaction_type')
+        exchange_segment = data.get('exchange_segment')
+        product_type = data.get('product_type')
+        order_type = data.get('order_type', 'L')
+
+        if not all([instrument_token, quantity, transaction_type, exchange_segment, product_type]):
+            return JsonResponse({'error': 'Required fields are missing.'}, status=400)
+
+        if order_type == 'MKT':
+            price = 0
+        elif price is None or price == '':
+            return JsonResponse({'error': 'Price is required for limit orders.'}, status=400)
+
+        api = KotakNeoAPI()
+        margin_response = api.margin_required(
+            instrument_token=instrument_token,
+            quantity=quantity,
+            price=0 if order_type == 'MKT' else price,
+            transaction_type=transaction_type,
+            exchange_segment=exchange_segment,
+            product=product_type,
+            order_type=order_type
+        )
+
+        if isinstance(margin_response, dict) and 'error' in margin_response:
+            return JsonResponse({'error': f"Margin check failed: {margin_response['error']}"}, status=400)
+
+        return JsonResponse({'status': 'success', 'data': margin_response.get('data', margin_response)})
 
     except (json.JSONDecodeError, ValueError, TypeError) as e:
         return JsonResponse({'error': f"Invalid request data: {e}"}, status=400)

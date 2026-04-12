@@ -81,7 +81,7 @@
         <div class="container-fluid">
             <a class="navbar-brand fw-bold" href="/">
                 <i class="bi bi-graph-up-arrow me-2"></i>
-                NeoTrade Dashboard
+                JK Terminal
             </a>
             <div class="d-flex align-items-center">
                 <span class="navbar-text me-3">
@@ -233,11 +233,9 @@
                         <caption id="scrip-results-caption">Search results</caption>
                         <thead class="table-light">
                             <tr>
-                                <th style="width: 12%;">Type</th>
-                                <th style="width: 10%;">Exchange</th>
-                                <th style="width: 25%;">Name</th>
-                                <th style="width: 15%;">Expiry Date</th>
-                                <th style="width: 12%;">Strike Price</th>
+                                <th style="width: 15%;">Type</th>
+                                <th style="width: 15%;">Exchange</th>
+                                <th style="width: 70%;">Name</th>
                             </tr>
                         </thead>
                         <tbody id="scrip-results-body">
@@ -260,20 +258,10 @@
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label text-muted small">Instrument</label>
-                            <p class="h6 mb-0" id="modal-scrip-name">-</p>
+                        <div id="modal-details">
+                            <!-- Dynamic content based on exchange -->
                         </div>
-                        <div class="row g-3">
-                            <div class="col-6">
-                                <label class="form-label text-muted small">Strike Price</label>
-                                <p class="h6 mb-0" id="modal-strike-price">-</p>
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label text-muted small">Expiry Date</label>
-                                <p class="h6 mb-0" id="modal-expiry-date">-</p>
-                            </div>
-                        </div>
+                        <div id="modal-data" style="display: none;"></div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline-primary" id="modal-show-depth-btn">
@@ -487,8 +475,13 @@
                         <form id="place-order-form">
                             {% csrf_token %}
                             <div class="row g-3">
+                                <input type="hidden" id="order-instrument-token">
+                                <input type="hidden" id="order-exchange-seg">
+                                <input type="hidden" id="order-product-type">
+                                <input type="hidden" id="order-option-type">
+
                                 <div class="col-md-6">
-                                    <label for="order-trading-symbol" class="form-label">Trading Symbol</label>
+                                    <label for="order-trading-symbol" class="form-label">Symbol</label>
                                     <input type="text" class="form-control" id="order-trading-symbol" readonly>
                                 </div>
                                 <div class="col-md-3">
@@ -525,14 +518,22 @@
                             <div class="row g-3 mt-2">
                                 <div class="col-12">
                                     <div class="alert alert-info" id="order-info">
-                                        <small>Product: <span id="product-type-text">-</span> | Exchange: <span id="exchange-text">-</span></small>
+                                        <small>Product: <span id="product-type-text">-</span> | Exchange: <span id="exchange-text">-</span> | Option Type: <span id="order-option-type-text">-</span></small>
                                     </div>
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-12">
+                                    <div id="order-margin-result" class="alert alert-info" style="display: none;"></div>
                                 </div>
                             </div>
                         </form>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-outline-success" id="check-margin-btn">
+                            <i class="bi bi-calculator me-1"></i> Check Req Margin
+                        </button>
                         <button type="button" class="btn btn-primary" id="submit-order-btn">
                             <i class="bi bi-send-fill me-1"></i> Place Order
                         </button>
@@ -601,7 +602,7 @@
     <footer class="py-4 mt-auto">
         <div class="container-fluid px-4">
             <div class="d-flex align-items-center justify-content-between small">
-                <div class="text-muted">Copyright &copy; NeoTrade Dashboard 2024</div>
+                <div class="text-muted">Copyright &copy; JK Terminal 2024</div>
             </div>
         </div>
     </footer>
@@ -826,28 +827,75 @@
                                 if (typeLabel === 'Option' || typeLabel === 'Future') {
                                     displayName = result.pTrdSymbol || result.pSymbolName || '-';
                                 }
-                                
+
+                                let optionTypeBadge = '';
+                                if (result.pOptionType && (typeLabel === 'Option' || typeLabel === 'Future')) {
+                                    optionTypeBadge = ` <span class="badge bg-secondary-subtle text-secondary-emphasis ms-1">${result.pOptionType}</span>`;
+                                }
+
+                                let extraInfoBadge = '';
+                                if (result.pExchSeg && result.pExchSeg.toLowerCase().includes('_fo')) {
+                                    extraInfoBadge = `<div class="mt-1"><span class="badge bg-light text-dark border">${expiryDate}</span> ${result.dStrikePrice > 0 ? `<span class="badge bg-light text-dark border">₹${result.dStrikePrice}</span>` : ''}</div>`;
+                                }
+
                                 row.innerHTML = `
                                     <td><span class="badge ${typeBadgeClass} border">${typeLabel}</span></td>
                                     <td><span class="badge ${exchangeBadgeClass} border">${exchangeLabel}</span></td>
-                                    <td class="small fw-bold">${displayName}</td>
-                                    <td class="small">${expiryDate}</td>
-                                    <td class="small">${result.dStrikePrice > 0 ? result.dStrikePrice : '-'}</td>
+                                    <td class="small fw-bold" title="${result.pDesc || ''}">${displayName}${optionTypeBadge}${extraInfoBadge}</td>
                                 `;
                                 
                                 // Make row clickable - show action modal
                                 row.style.cursor = 'pointer';
+                                row.setAttribute('title', result.pDesc || '');
                                 row.addEventListener('click', function() {
-                                    document.getElementById('modal-scrip-name').textContent = displayName;
-                                    document.getElementById('modal-strike-price').textContent = result.dStrikePrice > 0 ? result.dStrikePrice : '-';
-                                    document.getElementById('modal-expiry-date').textContent = expiryDate;
+                                    const isFO = result.pExchSeg && result.pExchSeg.toLowerCase().includes('_fo');
+                                    let detailsHtml = '';
+                                    
+                                    if (isFO) {
+                                        detailsHtml = `
+                                            <div class="mb-3">
+                                                <label class="form-label text-muted small">Instrument</label>
+                                                <p class="h6 mb-0">${displayName}</p>
+                                            </div>
+                                            <div class="row g-3">
+                                                <div class="col-4">
+                                                    <label class="form-label text-muted small">Option Type</label>
+                                                    <p class="h6 mb-0">${result.pOptionType || '-'}</p>
+                                                </div>
+                                                <div class="col-4">
+                                                    <label class="form-label text-muted small">Strike Price</label>
+                                                    <p class="h6 mb-0">${result.dStrikePrice > 0 ? result.dStrikePrice : '-'}</p>
+                                                </div>
+                                                <div class="col-4">
+                                                    <label class="form-label text-muted small">Expiry Date</label>
+                                                    <p class="h6 mb-0">${expiryDate}</p>
+                                                </div>
+                                            </div>
+                                        `;
+                                    } else {
+                                        detailsHtml = `
+                                            <div class="mb-3">
+                                                <label class="form-label text-muted small">Instrument</label>
+                                                <p class="h6 mb-0">${displayName}</p>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label text-muted small">Description</label>
+                                                <p class="h6 mb-0">${result.pDesc || '-'}</p>
+                                            </div>
+                                        `;
+                                    }
+                                    
+                                    document.getElementById('modal-details').innerHTML = detailsHtml;
                                     
                                     // Store data for depth and order
-                                    document.getElementById('modal-scrip-name').dataset.pSymbol = result.pSymbol;
-                                    document.getElementById('modal-scrip-name').dataset.pExchSeg = result.pExchSeg;
-                                    document.getElementById('modal-scrip-name').dataset.pTrdSymbol = result.pTrdSymbol;
-                                    document.getElementById('modal-scrip-name').dataset.lLotSize = result.lLotSize || 1;
-                                    document.getElementById('modal-scrip-name').dataset.dTickSize = result.dTickSize || 0.05;
+                                    document.getElementById('modal-data').dataset.pSymbol = result.pSymbol;
+                                    document.getElementById('modal-data').dataset.pExchSeg = result.pExchSeg;
+                                    document.getElementById('modal-data').dataset.pTrdSymbol = result.pTrdSymbol || result.pSymbol;
+                                    document.getElementById('modal-data').dataset.pOptionType = result.pOptionType || '-';
+                                    document.getElementById('modal-data').dataset.lLotSize = result.lLotSize || 1;
+                                    document.getElementById('modal-data').dataset.dTickSize = result.dTickSize || 0.05;
+                                    document.getElementById('modal-data').dataset.pDesc = result.pDesc || '';
+                                    document.getElementById('modal-data').dataset.displayName = displayName;
                                     
                                     const modal = new bootstrap.Modal(document.getElementById('scripActionModal'));
                                     modal.show();
@@ -880,9 +928,9 @@
 
             // Scrip action modal button handlers
             document.getElementById('modal-show-depth-btn').addEventListener('click', function() {
-                const scripName = document.getElementById('modal-scrip-name').textContent;
-                const pSymbol = document.getElementById('modal-scrip-name').dataset.pSymbol;
-                const pExchSeg = document.getElementById('modal-scrip-name').dataset.pExchSeg;
+                const scripName = document.getElementById('modal-data').dataset.displayName;
+                const pSymbol = document.getElementById('modal-data').dataset.pSymbol;
+                const pExchSeg = document.getElementById('modal-data').dataset.pExchSeg;
                 
                 if (!pSymbol || !pExchSeg) {
                     showNotification('Unable to get depth: missing symbol information', 'danger');
@@ -945,13 +993,15 @@
             });
 
             document.getElementById('modal-place-order-btn').addEventListener('click', function() {
-                const scripName = document.getElementById('modal-scrip-name').textContent;
-                const pTrdSymbol = document.getElementById('modal-scrip-name').dataset.pTrdSymbol;
-                const pExchSeg = document.getElementById('modal-scrip-name').dataset.pExchSeg;
-                const lLotSize = parseInt(document.getElementById('modal-scrip-name').dataset.lLotSize) || 1;
-                const dTickSize = parseFloat(document.getElementById('modal-scrip-name').dataset.dTickSize) || 0.05;
+                const scripName = document.getElementById('modal-data').dataset.displayName;
+                const pSymbol = document.getElementById('modal-data').dataset.pSymbol;
+                const pTrdSymbol = document.getElementById('modal-data').dataset.pTrdSymbol;
+                const pExchSeg = document.getElementById('modal-data').dataset.pExchSeg;
+                const pOptionType = document.getElementById('modal-data').dataset.pOptionType || '-';
+                const lLotSize = parseInt(document.getElementById('modal-data').dataset.lLotSize) || 1;
+                const dTickSize = parseFloat(document.getElementById('modal-data').dataset.dTickSize) || 0.05;
                 
-                if (!pTrdSymbol || !pExchSeg) {
+                if (!pSymbol || !pTrdSymbol || !pExchSeg) {
                     showNotification('Unable to place order: missing symbol information', 'danger');
                     return;
                 }
@@ -961,16 +1011,19 @@
                 actionModal.hide();
                 
                 // Determine product type based on exchange segment
-                let productType = 'MIS'; // Default for intraday
+                let productType = 'MIS';
                 if (pExchSeg === 'nse_cm' || pExchSeg === 'bse_cm') {
-                    productType = 'CNC'; // Delivery for stocks
-                } else if (pExchSeg === 'nse_fo' || pExchSeg === 'bse_fo') {
-                    productType = 'NRML'; // Normal for F&O
+                    productType = 'CNC';
                 }
                 
                 // Populate order modal
                 document.getElementById('order-scrip-name').textContent = scripName;
                 document.getElementById('order-trading-symbol').value = pTrdSymbol;
+                document.getElementById('order-instrument-token').value = pSymbol;
+                document.getElementById('order-exchange-seg').value = pExchSeg;
+                document.getElementById('order-product-type').value = productType;
+                document.getElementById('order-option-type').value = pOptionType;
+                document.getElementById('order-option-type-text').textContent = pOptionType;
                 document.getElementById('lot-size-text').textContent = lLotSize;
                 document.getElementById('tick-size-text').textContent = dTickSize.toFixed(2);
                 document.getElementById('product-type-text').textContent = productType;
@@ -981,14 +1034,20 @@
                 const priceInput = document.getElementById('order-price');
                 const orderTypeSelect = document.getElementById('order-type');
                 const totalValueInput = document.getElementById('order-total-value');
+                const orderMarginResult = document.getElementById('order-margin-result');
                 
+                // Reset order result
+                orderMarginResult.style.display = 'none';
+                orderMarginResult.textContent = '';
+
                 // Set quantity min and step
                 quantityInput.min = lLotSize;
                 quantityInput.step = lLotSize;
-                quantityInput.value = lLotSize; // Default to 1 lot
+                quantityInput.value = lLotSize;
                 
                 // Set price step
                 priceInput.step = dTickSize;
+                priceInput.value = '';
                 
                 // Function to calculate total value
                 function calculateTotal() {
@@ -1025,18 +1084,17 @@
                 function validatePrice() {
                     if (orderTypeSelect.value === 'MKT') {
                         priceInput.setCustomValidity('');
-                        return true; // No price validation for market orders
+                        return true;
                     }
 
                     const price = parseFloat(priceInput.value);
-                    const tickSize = parseFloat(dTickSize);
                     if (isNaN(price) || price <= 0) {
                         priceInput.setCustomValidity('Please enter a valid price.');
                         return false;
                     }
 
-                    if (!isMultipleOfTickSize(price, tickSize)) {
-                        priceInput.setCustomValidity(`Price must be in multiples of ${tickSize}`);
+                    if (!isMultipleOfTickSize(price, dTickSize)) {
+                        priceInput.setCustomValidity(`Price must be in multiples of ${dTickSize}`);
                         return false;
                     }
 
@@ -1059,7 +1117,6 @@
                     calculateTotal();
                 });
                 
-                // Add validation and calculation listeners
                 quantityInput.addEventListener('input', function() {
                     validateQuantity();
                     calculateTotal();
@@ -1070,12 +1127,83 @@
                     calculateTotal();
                 });
                 
-                // Initial calculation
                 calculateTotal();
                 
                 const orderModal = new bootstrap.Modal(document.getElementById('placeOrderModal'));
                 orderModal.show();
+                
+                // Add event listener for check margin button
+                document.getElementById('check-margin-btn').addEventListener('click', function() {
+                    const instrumentToken = document.getElementById('order-instrument-token').value;
+                    const quantity = document.getElementById('order-quantity').value;
+                    const price = document.getElementById('order-price').value;
+                    const transactionType = document.getElementById('transaction-type').value;
+                    const pExchSeg = document.getElementById('order-exchange-seg').value;
+                    const productType = document.getElementById('order-product-type').value;
+                    const orderType = document.getElementById('order-type').value;
+                    const orderMarginResult = document.getElementById('order-margin-result');
+                    
+                    orderMarginResult.style.display = 'block';
+                    orderMarginResult.className = 'alert alert-info';
+                    orderMarginResult.textContent = 'Checking margin requirements...';
+                    
+                    const marginRequest = {
+                        instrument_token: instrumentToken,
+                        quantity: quantity,
+                        price: orderType === 'MKT' ? '0' : price,
+                        transaction_type: transactionType,
+                        exchange_segment: pExchSeg,
+                        product_type: productType,
+                        order_type: orderType
+                    };
+                    
+                    fetch('/check_margin_ajax/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                        },
+                        body: JSON.stringify(marginRequest)
+                    })
+                    .then(response => response.json())
+                    .then(result => {
+                        if (result.status === 'success' && result.data) {
+                            showMarginResult(orderMarginResult, result.data);
+                        } else if (result.error) {
+                            orderMarginResult.className = 'alert alert-danger';
+                            orderMarginResult.textContent = result.error;
+                        } else {
+                            orderMarginResult.className = 'alert alert-danger';
+                            orderMarginResult.textContent = 'Margin check failed. Please try again.';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error checking margin:', error);
+                        orderMarginResult.className = 'alert alert-danger';
+                        orderMarginResult.textContent = 'An error occurred while checking margin requirements.';
+                    });
+                });
             });
+
+            function formatMarginResult(data) {
+                const avlMrgn = parseFloat(data.avlMrgn || data.avlCash || 0).toFixed(2);
+                const reqdMrgn = parseFloat(data.reqdMrgn || data.ordMrgn || 0).toFixed(2);
+                const insufFund = parseFloat(data.insufFund || 0).toFixed(2);
+                const rmsVldtd = data.rmsVldtd || data.stat || '';
+                let resultText = `Required margin: ₹${reqdMrgn}. Available margin: ₹${avlMrgn}.`;
+                if (parseFloat(insufFund) > 0 || rmsVldtd.toUpperCase() !== 'OK') {
+                    resultText += ` Insufficient funds: ₹${insufFund}.`;
+                }
+                return { text: resultText, insufFund: parseFloat(insufFund), status: rmsVldtd.toUpperCase() };
+            }
+
+            function showMarginResult(container, data) {
+                const formatted = formatMarginResult(data);
+                container.style.display = 'block';
+                container.textContent = formatted.text;
+                container.className = `alert ${formatted.insufFund > 0 || formatted.status !== 'OK' ? 'alert-danger' : 'alert-success'}`;
+                return formatted;
+            }
 
             // Place order form submission
             document.getElementById('submit-order-btn').addEventListener('click', function() {
@@ -1086,41 +1214,73 @@
                 }
                 
                 const tradingSymbol = document.getElementById('order-trading-symbol').value;
+                const instrumentToken = document.getElementById('order-instrument-token').value;
                 const orderType = document.getElementById('order-type').value;
                 const transactionType = document.getElementById('transaction-type').value;
                 const quantity = document.getElementById('order-quantity').value;
                 const price = document.getElementById('order-price').value;
-                const pExchSeg = document.getElementById('modal-scrip-name').dataset.pExchSeg;
-                
-                // Determine product type
-                let productType = 'MIS';
-                if (pExchSeg === 'nse_cm' || pExchSeg === 'bse_cm') {
-                    productType = 'CNC';
-                } else if (pExchSeg === 'nse_fo' || pExchSeg === 'bse_fo') {
-                    productType = 'NRML';
-                }
+                const pExchSeg = document.getElementById('order-exchange-seg').value;
+                const productType = document.getElementById('order-product-type').value;
+                const orderMarginResult = document.getElementById('order-margin-result');
                 
                 const submitBtn = document.getElementById('submit-order-btn');
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Placing...';
+
+                orderMarginResult.style.display = 'block';
+                orderMarginResult.className = 'alert alert-info';
+                orderMarginResult.textContent = 'Checking margin requirements...';
                 
-                const orderData = {
-                    instrument_token: tradingSymbol,
+                const marginRequest = {
+                    instrument_token: instrumentToken,
                     quantity: quantity,
+                    price: orderType === 'MKT' ? '0' : price,
                     transaction_type: transactionType,
                     exchange_segment: pExchSeg,
                     product_type: productType,
-                    order_type: orderType,
-                    price: orderType === 'MKT' ? '0' : price
+                    order_type: orderType
                 };
-                
-                fetch('/place_trade_ajax/', {
+
+                fetch('/check_margin_ajax/', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
                     },
-                    body: JSON.stringify(orderData)
+                    body: JSON.stringify(marginRequest)
+                })
+                .then(response => response.json())
+                .then(marginResult => {
+                    if (marginResult.status !== 'success') {
+                        orderMarginResult.className = 'alert alert-danger';
+                        orderMarginResult.textContent = marginResult.error || 'Margin check failed. Please add funds and try again.';
+                        throw new Error('Margin validation failed');
+                    }
+
+                    const formatted = showMarginResult(orderMarginResult, marginResult.data);
+                    if (formatted.insufFund > 0 || formatted.status !== 'OK') {
+                        throw new Error('Insufficient margin');
+                    }
+
+                    const orderData = {
+                        instrument_token: instrumentToken,
+                        trading_symbol: tradingSymbol,
+                        quantity: quantity,
+                        transaction_type: transactionType,
+                        exchange_segment: pExchSeg,
+                        product_type: productType,
+                        order_type: orderType,
+                        price: orderType === 'MKT' ? '0' : price
+                    };
+
+                    return fetch('/place_trade_ajax/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                        },
+                        body: JSON.stringify(orderData)
+                    });
                 })
                 .then(response => response.json())
                 .then(result => {
@@ -1128,15 +1288,18 @@
                         showNotification(result.message, 'success');
                         const orderModal = bootstrap.Modal.getInstance(document.getElementById('placeOrderModal'));
                         orderModal.hide();
-                        // Optional: Refresh order book after a short delay
                         setTimeout(() => window.location.reload(), 1500);
                     } else {
                         showNotification(result.message || 'An unknown error occurred.', 'danger');
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
-                    showNotification('A network error occurred. Please try again.', 'danger');
+                    if (error.message === 'Margin validation failed' || error.message === 'Insufficient margin') {
+                        showNotification('Insufficient margin. Please add funds and try again.', 'danger');
+                    } else {
+                        console.error('Error:', error);
+                        showNotification('A network error occurred. Please try again.', 'danger');
+                    }
                 })
                 .finally(() => {
                     submitBtn.disabled = false;

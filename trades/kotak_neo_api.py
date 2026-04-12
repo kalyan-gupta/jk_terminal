@@ -173,6 +173,27 @@ class KotakNeoAPI:
             logger.error(f"Error placing trade: {e}", exc_info=True)
             return {"error": f"An error occurred while placing trade: {e}"}
 
+    def margin_required(self, instrument_token, quantity, price, transaction_type,
+                        exchange_segment='nse_cm', product='MIS', order_type='L'):
+        auth_response = self.authenticate()
+        if 'error' in auth_response:
+            return auth_response
+
+        try:
+            params = {
+                'exchange_segment': exchange_segment,
+                'product': product,
+                'order_type': order_type,
+                'quantity': str(quantity),
+                'instrument_token': instrument_token,
+                'transaction_type': transaction_type[0].upper(),
+                'price': str(price if price is not None else 0)
+            }
+            return self.client.margin_required(**params)
+        except Exception as e:
+            logger.error(f"Error checking margin: {e}", exc_info=True)
+            return {"error": f"An error occurred while checking margin: {e}"}
+
     def subscribe(self, instrument_tokens, on_message):
         auth_response = self.authenticate()
         if 'error' in auth_response:
