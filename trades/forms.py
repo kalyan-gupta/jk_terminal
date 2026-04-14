@@ -97,25 +97,11 @@ class UserNeoCredentialsForm(forms.ModelForm):
             'placeholder': 'Your MPIN'
         })
     )
-    totp_secret = forms.CharField(
-        label="TOTP Secret",
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Your TOTP Secret Key'
-        })
-    )
     consumer_key = forms.CharField(
         label="Consumer Key",
         widget=forms.TextInput(attrs={
             'class': 'form-control',
             'placeholder': 'Your Consumer Key'
-        })
-    )
-    consumer_secret = forms.CharField(
-        label="Consumer Secret",
-        widget=forms.PasswordInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Your Consumer Secret'
         })
     )
     mobile_number = forms.CharField(
@@ -145,7 +131,7 @@ class UserNeoCredentialsForm(forms.ModelForm):
     
     class Meta:
         model = UserNeoCredentials
-        fields = ['mpin', 'totp_secret', 'consumer_key', 'consumer_secret', 'mobile_number', 'ucc', 'account_name']
+        fields = ['mpin', 'consumer_key', 'mobile_number', 'ucc', 'account_name']
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -153,10 +139,21 @@ class UserNeoCredentialsForm(forms.ModelForm):
         if self.instance and self.instance.pk:
             decrypted = self.instance.get_decrypted_credentials()
             self.fields['mpin'].initial = decrypted['MPIN']
-            self.fields['totp_secret'].initial = decrypted['TOTP_SECRET']
             self.fields['consumer_key'].initial = decrypted['CONSUMER_KEY']
-            self.fields['consumer_secret'].initial = decrypted['CONSUMER_SECRET']
             self.fields['mobile_number'].initial = decrypted['MOBILE_NUMBER']
+
+
+class TOTPForm(forms.Form):
+    """Prompt user for one-time Neo API TOTP code"""
+    totp = forms.CharField(
+        label="One-Time TOTP Code",
+        max_length=10,
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Enter current authenticator code',
+            'autocomplete': 'one-time-code'
+        })
+    )
 
 
 class UserProfileForm(UserChangeForm):

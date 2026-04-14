@@ -25,4 +25,7 @@ urlpatterns = [
     path('refresh_scrip_master/', views.refresh_scrip_master, name='refresh_scrip_master'),
     path('refresh_scrip_cache/', views.refresh_scrip_cache, name='refresh_scrip_cache'),
     path('get_depth/', views.get_depth, name='get_depth'),
+    path('get_ltp/', views.get_ltp, name='get_ltp'),
+    path('reauthenticate/', views.reauthenticate_view, name='reauthenticate'),
+    path('logout_sdk/', views.logout_sdk_session, name='logout_sdk'),
 ]

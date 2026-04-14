@@ -472,7 +472,10 @@
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">Place Order - <span id="order-scrip-name"></span></h5>
+                        <div>
+                            <h5 class="modal-title">Place Order - <span id="order-scrip-name"></span></h5>
+                            <span class="badge bg-info text-dark mt-1" id="order-ltp-badge">LTP: -</span>
+                        </div>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
@@ -1032,6 +1035,20 @@
                 document.getElementById('tick-size-text').textContent = dTickSize.toFixed(2);
                 document.getElementById('product-type-text').textContent = productType;
                 document.getElementById('exchange-text').textContent = pExchSeg.toUpperCase();
+                document.getElementById('order-ltp-badge').textContent = 'LTP: Loading...';
+
+                fetch(`/get_ltp/?p_symbol=${encodeURIComponent(pSymbol)}&p_exch_seg=${encodeURIComponent(pExchSeg)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.ltp) {
+                            document.getElementById('order-ltp-badge').textContent = `LTP: ₹${parseFloat(data.ltp).toFixed(2)}`;
+                        } else {
+                            document.getElementById('order-ltp-badge').textContent = 'LTP: N/A';
+                        }
+                    })
+                    .catch(() => {
+                        document.getElementById('order-ltp-badge').textContent = 'LTP: N/A';
+                    });
                 
                 // Set up form validation
                 const quantityInput = document.getElementById('order-quantity');

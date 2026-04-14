@@ -1,6 +1,7 @@
 from neo_api_client import NeoAPI
 from django.conf import settings
-import pyotp
+from django.utils import timezone
+from datetime import timedelta
 import logging
 import requests
 import os
@@ -12,6 +13,8 @@ class KotakNeoAPI:
     Kotak Neo API handler - now supports per-user credentials.
     Each user has their own instance with their credentials.
     """
+
+    _session_cache = {}
     
     def __init__(self, user=None, credentials=None):
         """
@@ -19,9 +22,10 @@ class KotakNeoAPI:
         
         Args:
             user: Django User instance (will fetch credentials from database)
-            credentials: Dict with MPIN, TOTP_SECRET, CONSUMER_KEY, etc. (for testing/fallback)
+            credentials: Dict with MPIN, CONSUMER_KEY, etc. (for testing/fallback)
         """
         self.user = user
+        self.user_id = user.id if user else None
         self.is_authenticated = False
         self.login_data = None
         self.client = None
@@ -47,48 +51,77 @@ class KotakNeoAPI:
         if self.credentials and 'CONSUMER_KEY' in self.credentials:
             self.client = NeoAPI(environment='prod', consumer_key=self.credentials['CONSUMER_KEY'])
     
-    def generate_totp(self):
-        """Generate TOTP token"""
-        if not self.credentials or 'TOTP_SECRET' not in self.credentials:
+    def get_cached_session(self):
+        """Return cached authenticated session data if still valid."""
+        if not self.user_id:
             return None
-        totp = pyotp.TOTP(self.credentials['TOTP_SECRET'])
-        logger.debug("Generating TOTP...")
-        return totp.now()
+        session_info = KotakNeoAPI._session_cache.get(self.user_id)
+        if not session_info:
+            return None
+        if session_info.get('expires_at') and timezone.now() < session_info['expires_at']:
+            return session_info
+        self.clear_cached_session()
+        return None
 
-    def authenticate(self):
-        """Authenticate with Kotak Neo API"""
-        if self.is_authenticated:
-            return {"status": "success", "message": "Already authenticated"}
-        
+    def cache_session(self, login_data, duration_seconds=1800):
+        """Cache the authenticated client for the session duration."""
+        if not self.user_id:
+            return
+        expires_at = timezone.now() + timedelta(seconds=duration_seconds)
+        KotakNeoAPI._session_cache[self.user_id] = {
+            'client': self.client,
+            'login_data': login_data,
+            'expires_at': expires_at,
+        }
+
+    def clear_cached_session(self):
+        """Remove any cached SDK session for this user."""
+        if not self.user_id:
+            return
+        KotakNeoAPI._session_cache.pop(self.user_id, None)
+
+    def authenticate(self, totp=None, force_refresh=False):
+        """Authenticate with Kotak Neo API using a one-time TOTP code."""
+        if self.user and not force_refresh:
+            cached = self.get_cached_session()
+            if cached:
+                self.client = cached['client']
+                self.login_data = cached['login_data']
+                self.is_authenticated = True
+                return {"status": "success", "message": "Already authenticated"}
+
         if not self.client:
             return {"error": "API client not initialized. Please configure your credentials."}
-        
+
+        if not totp:
+            return {"error": "One-time TOTP code is required to authenticate the Neo SDK session."}
+
         try:
             logger.info(f"Attempting Kotak Neo API authentication for user {self.user.username if self.user else 'unknown'}...")
-            
+
             login_response = self.client.totp_login(
-                mobile_number=self.credentials['MOBILE_NUMBER'], 
-                ucc=self.credentials['UCC'], 
-                totp=self.generate_totp()
+                mobile_number=self.credentials['MOBILE_NUMBER'],
+                ucc=self.credentials['UCC'],
+                totp=totp
             )
-            
+
             if isinstance(login_response, dict) and ('error' in login_response or 'Error Message' in login_response):
                 return {"error": f"Login failed: {login_response}"}
 
             validate_response = self.client.totp_validate(mpin=self.credentials['MPIN'])
-            
+
             if isinstance(validate_response, dict) and ('error' in validate_response or 'Error Message' in validate_response):
                 return {"error": f"Validation failed: {validate_response}"}
 
             self.is_authenticated = True
             self.login_data = validate_response
-            
-            # Update last_used timestamp
+            self.cache_session(login_data=validate_response)
+
             if self.user_credentials_obj:
-                from django.utils import timezone
+                self.user_credentials_obj.mark_sdk_session_active(duration_seconds=1800)
                 self.user_credentials_obj.last_used = timezone.now()
                 self.user_credentials_obj.save()
-            
+
             logger.info(f"Authentication successful for {self.user.username if self.user else 'user'}.")
             return {"status": "success", "message": "Authenticated successfully"}
         except Exception as e:
@@ -267,6 +300,22 @@ class KotakNeoAPI:
         except Exception as e:
             logger.error(f"Error unsubscribing: {e}", exc_info=True)
 
+    def logout(self):
+        """Logout the SDK session and clear the cached session."""
+        try:
+            if self.client and hasattr(self.client, 'logout'):
+                self.client.logout()
+        except Exception as e:
+            logger.warning(f"SDK logout call failed: {e}", exc_info=True)
+
+        if self.user_credentials_obj:
+            self.user_credentials_obj.deactivate_sdk_session()
+
+        self.clear_cached_session()
+        self.is_authenticated = False
+        self.login_data = None
+        return {"status": "success", "message": "SDK session cleared."}
+
     def search_scrip(self, exchange_segment, symbol):
         auth_response = self.authenticate()
         if 'error' in auth_response:
@@ -328,3 +377,14 @@ class KotakNeoAPI:
                 return {"error": f"Failed to download file: {file_url}"}
 
         return {"status": "success", "downloaded_files": downloaded_files}
+
+
+def logout_sdk_session_for_user(user):
+    """Helper to clear any SDK session for the given user."""
+    try:
+        api = KotakNeoAPI(user=user)
+        api.logout()
+    except Exception as e:
+        logger.warning(f"Failed to logout SDK session for user {user.username if user else 'unknown'}: {e}", exc_info=True)
+
+    return {"status": "success", "message": "SDK session cleared."}

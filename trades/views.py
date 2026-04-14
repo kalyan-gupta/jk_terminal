@@ -6,7 +6,7 @@ from django.http import JsonResponse
 from django.conf import settings
 from .kotak_neo_api import KotakNeoAPI
 from .models import UserNeoCredentials, SessionActivity
-from .forms import LoginForm, RegistrationForm, UserNeoCredentialsForm, UserProfileForm
+from .forms import LoginForm, RegistrationForm, UserNeoCredentialsForm, UserProfileForm, TOTPForm
 from .decorators import login_required_with_session_check, ajax_login_required
 import json
 import duckdb
@@ -114,6 +114,7 @@ def logout_view(request):
     """Handle user logout"""
     if request.user.is_authenticated:
         username = request.user.username
+        logout_sdk_for_user(request.user)
         SessionActivity.objects.filter(user=request.user).delete()
         logout(request)
         messages.success(request, f"Logged out successfully. Goodbye, {username}!")
@@ -136,7 +137,8 @@ def setup_credentials(request):
             credentials = form.save(commit=False)
             credentials.user = request.user
             credentials.save()
-            messages.success(request, "Neo API credentials updated successfully!")
+            logout_sdk_for_user(request.user)
+            messages.success(request, "Neo API credentials updated successfully! Please reauthenticate the trading session.")
             return redirect('index')
     else:
         form = UserNeoCredentialsForm(instance=user_creds)
@@ -161,6 +163,42 @@ def view_credentials(request):
 
 
 @login_required_with_session_check
+def reauthenticate_view(request):
+    """Prompt for a one-time TOTP to establish or refresh the SDK session."""
+    try:
+        user_creds = UserNeoCredentials.objects.get(user=request.user, is_active=True)
+    except UserNeoCredentials.DoesNotExist:
+        messages.warning(request, "Please configure your Neo API credentials first.")
+        return redirect('setup_credentials')
+
+    if request.method == 'POST':
+        form = TOTPForm(request.POST)
+        if form.is_valid():
+            totp = form.cleaned_data['totp']
+            api = KotakNeoAPI(user=request.user)
+            auth_result = api.authenticate(totp=totp, force_refresh=True)
+            if auth_result.get('status') == 'success':
+                messages.success(request, "Neo SDK session authenticated successfully.")
+                return redirect('index')
+            messages.error(request, auth_result.get('error', 'Authentication failed.'))
+    else:
+        form = TOTPForm()
+
+    return render(request, 'trades/reauthenticate.html', {
+        'form': form,
+        'has_credentials': True,
+    })
+
+
+@login_required_with_session_check
+def logout_sdk_session(request):
+    """Force logout of the user's Neo SDK session."""
+    logout_sdk_for_user(request.user)
+    messages.success(request, "Neo SDK session has been logged out.")
+    return redirect('profile')
+
+
+@login_required_with_session_check
 def edit_credentials(request):
     """Edit credentials"""
     try:
@@ -173,7 +211,8 @@ def edit_credentials(request):
         form = UserNeoCredentialsForm(request.POST, instance=user_creds)
         if form.is_valid():
             form.save()
-            messages.success(request, "Credentials updated successfully!")
+            logout_sdk_for_user(request.user)
+            messages.success(request, "Credentials updated successfully! Please reauthenticate the trading session.")
             return redirect('index')
     else:
         form = UserNeoCredentialsForm(instance=user_creds)
@@ -199,9 +238,17 @@ def profile_view(request):
     except UserNeoCredentials.DoesNotExist:
         has_credentials = False
     
+    sdk_status = False
+    if has_credentials:
+        try:
+            sdk_status = user_creds.is_sdk_session_valid()
+        except Exception:
+            sdk_status = False
+
     return render(request, 'trades/profile.html', {
         'form': form,
-        'has_credentials': has_credentials
+        'has_credentials': has_credentials,
+        'sdk_status': sdk_status,
     })
 
 
@@ -213,6 +260,16 @@ def get_client_ip(request):
     else:
         ip = request.META.get('REMOTE_ADDR')
     return ip
+
+
+def logout_sdk_for_user(user):
+    """Logout the Kotak Neo SDK session for the given user."""
+    try:
+        api = KotakNeoAPI(user=user)
+        api.logout()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"SDK logout failed: {e}")
 
 
 # ==================== Trading Views (Protected) ====================
@@ -569,6 +626,34 @@ def get_depth(request):
 
 
 @login_required_with_session_check
+def get_ltp(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Only GET requests are allowed'}, status=405)
+
+    p_symbol = request.GET.get('p_symbol', '')
+    p_exch_seg = request.GET.get('p_exch_seg', '')
+
+    if not p_symbol or not p_exch_seg:
+        return JsonResponse({'error': 'p_symbol and p_exch_seg are required.'}, status=400)
+
+    try:
+        api = KotakNeoAPI(user=request.user)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+    instrument_tokens = [{"instrument_token": p_symbol, "exchange_segment": p_exch_seg}]
+    result = api.quotes(instrument_tokens=instrument_tokens, quote_type="all")
+
+    if 'error' in result:
+        return JsonResponse({'error': result['error']}, status=400)
+
+    if isinstance(result, list) and len(result) > 0:
+        return JsonResponse({'ltp': result[0].get('ltp')})
+
+    return JsonResponse({'error': 'No quote data received'}, status=400)
+
+
+@login_required_with_session_check
 def index(request):
     """Main trading dashboard - requires authentication"""
     api_response = None
@@ -579,7 +664,11 @@ def index(request):
     except UserNeoCredentials.DoesNotExist:
         messages.warning(request, "Please configure your Neo API credentials to start trading.")
         return redirect('setup_credentials')
-    
+
+    sdk_active = user_creds.is_sdk_session_valid()
+    if not sdk_active:
+        messages.warning(request, "Your Neo SDK session is not active or has expired. Please reauthenticate.")
+
     try:
         api = KotakNeoAPI(user=request.user)
     except Exception as e:
@@ -589,19 +678,31 @@ def index(request):
     if request.method == 'POST':
         if 'cancel_order_id' in request.POST:
             order_id = request.POST.get('cancel_order_id')
-            api_response = api.cancel_order(order_id)
-            if 'error' in api_response:
-                messages.error(request, f"Cancellation failed: {api_response['error']}")
+            if sdk_active:
+                api_response = api.cancel_order(order_id)
+                if 'error' in api_response:
+                    messages.error(request, f"Cancellation failed: {api_response['error']}")
+                else:
+                    messages.success(request, f"Order cancellation requested: {api_response.get('result', 'Success')}")
             else:
-                messages.success(request, f"Order cancellation requested: {api_response.get('result', 'Success')}")
+                messages.warning(request, "Cannot cancel orders because the Neo SDK session is not active. Please reauthenticate.")
 
     # Fetch account information, holdings, limits, and order book for display.
-    # These methods will trigger authentication on the first call if not already authenticated.
-    account_info = api.get_account_info()
-    holdings = api.get_holdings()
-    raw_limits = api.get_limits()
-    order_book = api.get_order_book()
-    positions = api.get_positions()
+    account_info = {}
+    holdings = []
+    raw_limits = {}
+    order_book = []
+    positions = []
+
+    if sdk_active:
+        # These methods will trigger authentication on the first call if the SDK session is available.
+        account_info = api.get_account_info()
+        holdings = api.get_holdings()
+        raw_limits = api.get_limits()
+        order_book = api.get_order_book()
+        positions = api.get_positions()
+    else:
+        messages.info(request, "SDK session is inactive. Use the Reauthenticate link in your profile to restore trading access.")
 
     # Handle potential errors from the API calls to prevent page crashes
     if 'error' in account_info:
@@ -686,6 +787,7 @@ def index(request):
         'order_book': order_book,
         'portfolio_summary': portfolio_summary,
         'debug_limits': debug_limits,
+        'sdk_active': sdk_active,
         'is_connected': True if account_info and 'error' not in account_info else False,
     }
 

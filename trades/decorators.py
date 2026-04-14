@@ -25,6 +25,8 @@ def login_required_with_session_check(view_func):
             session_activity = SessionActivity.objects.get(user=request.user)
             if session_activity.is_expired(timeout_seconds=300):  # 5 minutes
                 # Session expired
+                from trades.kotak_neo_api import logout_sdk_session_for_user
+                logout_sdk_session_for_user(request.user)
                 request.session.flush()
                 request.user = AnonymousUser()
                 logger.info(f"Session expired for user {session_activity.user.username} at {request.path}")
@@ -71,6 +73,8 @@ def ajax_login_required(view_func):
         try:
             session_activity = SessionActivity.objects.get(user=request.user)
             if session_activity.is_expired(timeout_seconds=300):  # 5 minutes
+                from trades.kotak_neo_api import logout_sdk_session_for_user
+                logout_sdk_session_for_user(request.user)
                 request.session.flush()
                 request.user = AnonymousUser()
                 return JsonResponse({'error': 'Session expired', 'expired': True}, status=401)

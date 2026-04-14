@@ -12,10 +12,13 @@ class UserNeoCredentials(models.Model):
     
     # Encrypted fields (stored encrypted)
     mpin = models.CharField(max_length=500)  # Encrypted
-    totp_secret = models.CharField(max_length=500)  # Encrypted
     consumer_key = models.CharField(max_length=500)  # Encrypted
-    consumer_secret = models.CharField(max_length=500)  # Encrypted
     mobile_number = models.CharField(max_length=500)  # Encrypted
+
+    # SDK session metadata
+    sdk_session_active = models.BooleanField(default=False)
+    sdk_session_started_at = models.DateTimeField(null=True, blank=True)
+    sdk_session_expires_at = models.DateTimeField(null=True, blank=True)
     
     # Plain text fields
     ucc = models.CharField(max_length=100)
@@ -33,6 +36,26 @@ class UserNeoCredentials(models.Model):
     
     def __str__(self):
         return f"{self.user.username} - {self.account_name}"
+
+    def is_sdk_session_valid(self, timeout_seconds=1800):
+        """Return whether the stored SDK session is still valid."""
+        if not self.sdk_session_active or not self.sdk_session_expires_at:
+            return False
+        return timezone.now() < self.sdk_session_expires_at
+
+    def mark_sdk_session_active(self, duration_seconds=1800):
+        """Mark a SDK session as active for the given duration."""
+        self.sdk_session_active = True
+        self.sdk_session_started_at = timezone.now()
+        self.sdk_session_expires_at = timezone.now() + timezone.timedelta(seconds=duration_seconds)
+        self.save()
+
+    def deactivate_sdk_session(self):
+        """Mark the SDK session as inactive."""
+        self.sdk_session_active = False
+        self.sdk_session_started_at = None
+        self.sdk_session_expires_at = None
+        self.save()
     
     @staticmethod
     def get_cipher():
@@ -84,9 +107,7 @@ class UserNeoCredentials(models.Model):
     def save(self, *args, **kwargs):
         """Encrypt sensitive fields before saving"""
         self.mpin = self.encrypt_field(self.mpin)
-        self.totp_secret = self.encrypt_field(self.totp_secret)
         self.consumer_key = self.encrypt_field(self.consumer_key)
-        self.consumer_secret = self.encrypt_field(self.consumer_secret)
         self.mobile_number = self.encrypt_field(self.mobile_number)
         super().save(*args, **kwargs)
     
@@ -94,20 +115,16 @@ class UserNeoCredentials(models.Model):
         """Get all credentials in decrypted form"""
         return {
             'MPIN': self.decrypt_field(self.mpin),
-            'TOTP_SECRET': self.decrypt_field(self.totp_secret),
             'CONSUMER_KEY': self.decrypt_field(self.consumer_key),
-            'CONSUMER_SECRET': self.decrypt_field(self.consumer_secret),
             'MOBILE_NUMBER': self.decrypt_field(self.mobile_number),
             'UCC': self.ucc,
             'ACCOUNT_NAME': self.account_name,
         }
     
-    def update_credentials(self, mpin, totp_secret, consumer_key, consumer_secret, mobile_number, ucc, account_name):
+    def update_credentials(self, mpin, consumer_key, mobile_number, ucc, account_name):
         """Update credentials (will be encrypted on save)"""
         self.mpin = mpin
-        self.totp_secret = totp_secret
         self.consumer_key = consumer_key
-        self.consumer_secret = consumer_secret
         self.mobile_number = mobile_number
         self.ucc = ucc
         self.account_name = account_name

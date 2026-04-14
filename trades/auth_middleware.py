@@ -28,7 +28,9 @@ class SessionExpiryMiddleware:
                 
                 # Check if session has expired
                 if session_activity.is_expired(self.SESSION_TIMEOUT):
-                    # Session expired, flush it
+                    # Session expired, logout SDK session and flush it
+                    from trades.kotak_neo_api import logout_sdk_session_for_user
+                    logout_sdk_session_for_user(request.user)
                     request.session.flush()
                     request.user = AnonymousUser()
                     logger.info(f"Session expired for user {session_activity.user.username}")
