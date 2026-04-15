@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Registration - JK Terminal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .otp-container {
+            width: 100%;
+            max-width: 450px;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 1rem;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            background: rgba(255, 255, 255, 0.98);
+        }
+        
+        .card-body {
+            padding: 3rem 2.5rem;
+        }
+        
+        .brand-logo {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .brand-logo i {
+            font-size: 3rem;
+            color: #667eea;
+        }
+        
+        .brand-logo h2 {
+            color: #333;
+            font-weight: 700;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .brand-logo p {
+            color: #666;
+            font-size: 0.95rem;
+            margin: 0;
+            line-height: 1.5;
+        }
+        
+        .form-control {
+            border: 2px solid #e0e0e0;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            font-size: 1.25rem;
+            transition: all 0.3s;
+        }
+        
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.25);
+        }
+        
+        .form-label {
+            font-weight: 600;
+            color: #444;
+            margin-bottom: 0.75rem;
+            text-align: center;
+            display: block;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(to right, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 0.875rem 1.5rem;
+            font-weight: 600;
+            font-size: 1.05rem;
+            border-radius: 0.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+            margin-top: 1.5rem;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+            color: white;
+        }
+        
+        .secondary-link {
+            text-align: center;
+            margin-top: 2rem;
+            font-size: 0.9rem;
+            color: #666;
+        }
+        
+        .secondary-link a {
+            color: #dc3545;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s;
+        }
+        
+        .secondary-link a:hover {
+            color: #bb2d3b;
+            text-decoration: underline;
+        }
+        
+        .alert {
+            border: none;
+            border-radius: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-error {
+            color: #dc3545;
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="otp-container">
+        <div class="card">
+            <div class="card-body">
+                <div class="brand-logo">
+                    <i class="bi bi-envelope-check-fill"></i>
+                    <h2>Verify Your Email</h2>
+                    <p>We've sent a 6-digit verification code to the email address you provided. Please enter it below to complete registration.</p>
+                </div>
+                
+                {% if messages %}
+                    {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+                
+                <form method="post" autocomplete="off">
+                    {% csrf_token %}
+                    
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {% for error in form.non_field_errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    
+                    <div class="mb-3">
+                        <label for="{{ form.otp.id_for_label }}" class="form-label">
+                            <i class="bi bi-key-fill me-1"></i> {{ form.otp.label }}
+                        </label>
+                        {{ form.otp }}
+                        {% if form.otp.errors %}
+                        <div class="form-error">
+                            {% for error in form.otp.errors %}{{ error }}{% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-shield-check me-2"></i> Verify Account
+                    </button>
+                </form>
+                
+                <div class="secondary-link">
+                    Didn't receive code or got stuck? <br>
+                    <a href="{% url 'register' %}" class="mt-2 d-inline-block"><i class="bi bi-arrow-left-circle me-1"></i>Restart Registration</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

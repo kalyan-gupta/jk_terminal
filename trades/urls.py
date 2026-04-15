@@ -10,6 +10,7 @@ urlpatterns = [
     path('forgot-password/', views.forgot_password_view, name='forgot_password'),
     path('set-new-password/', views.set_new_password_view, name='set_new_password'),
     path('change-password/', views.change_password_view, name='change_password'),
+    path('verify-email/', views.otp_verify_view, name='otp_verify'),
     
     # Credentials Management URLs
     path('credentials/setup/', views.setup_credentials, name='setup_credentials'),

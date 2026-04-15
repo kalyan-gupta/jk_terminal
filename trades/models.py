@@ -160,6 +160,7 @@ class SMTPSettings(models.Model):
     from_address = models.CharField(max_length=255, blank=True, null=True)
     host_password = models.CharField(max_length=500, blank=True, null=True)  # Will be encrypted
     enable_password_reset = models.BooleanField(default=False)
+    enable_registration_otp = models.BooleanField(default=False)
     
     class Meta:
         verbose_name = "SMTP Settings"

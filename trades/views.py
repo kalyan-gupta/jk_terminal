@@ -6,7 +6,7 @@ from django.http import JsonResponse
 from django.conf import settings
 from .kotak_neo_api import KotakNeoAPI
 from .models import UserNeoCredentials, SessionActivity, SMTPSettings, UserSecurity
-from .forms import LoginForm, RegistrationForm, UserNeoCredentialsForm, UserProfileForm, TOTPForm, ForgotPasswordForm, SetNewPasswordForm, ChangePasswordForm
+from .forms import LoginForm, RegistrationForm, UserNeoCredentialsForm, UserProfileForm, TOTPForm, ForgotPasswordForm, SetNewPasswordForm, ChangePasswordForm, OTPVerifyForm
 from .decorators import login_required_with_session_check, ajax_login_required
 import json
 import duckdb
@@ -92,23 +92,110 @@ def register_view(request):
     if request.method == 'POST':
         form = RegistrationForm(request.POST)
         if form.is_valid():
-            user = form.save()
-            messages.success(request, "Registration successful! Please configure your Neo API credentials.")
+            settings_obj = SMTPSettings.get_settings()
             
-            # Redirect to credentials setup
-            login(request, user)
-            SessionActivity.objects.update_or_create(
-                user=user,
-                defaults={
-                    'session_key': request.session.session_key,
-                    'ip_address': get_client_ip(request)
-                }
-            )
-            return redirect('setup_credentials')
+            if settings_obj.enable_registration_otp:
+                user = form.save(commit=False)
+                user.is_active = False  # Deactivate until verified
+                user.save()
+                
+                # Generate and store OTP
+                import random
+                import string
+                otp = ''.join(random.choice(string.digits) for _ in range(6))
+                
+                request.session['registration_user_id'] = user.id
+                request.session['registration_otp'] = otp
+                
+                # Send email
+                try:
+                    from django.core.mail import get_connection, EmailMessage
+                    connection = get_connection(
+                        host=settings_obj.host,
+                        port=settings_obj.port,
+                        username=settings_obj.host_user,
+                        password=settings_obj.get_decrypted_password(),
+                        use_tls=settings_obj.use_tls
+                    )
+                    from_addr = settings_obj.from_address if settings_obj.from_address else settings_obj.host_user
+                    email_msg = EmailMessage(
+                        subject="JK Terminal - Registration Verification",
+                        body=f"Hello {user.username},\n\nYour account verification code is: {otp}\n\nPlease enter this code to complete your registration.\n\nThank you.",
+                        from_email=from_addr,
+                        to=[user.email],
+                        connection=connection
+                    )
+                    email_msg.send(fail_silently=False)
+                    messages.success(request, "A verification code has been sent to your email.")
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"Error sending OTP email: {e}")
+                    user.delete() # Revert account creation since code could not dispatch
+                    messages.error(request, "Failed to send verification email. Please try again later.")
+                    return redirect('register')
+                    
+                return redirect('otp_verify')
+            else:
+                user = form.save()
+                messages.success(request, "Registration successful! Please configure your Neo API credentials.")
+                
+                # Redirect to credentials setup
+                login(request, user)
+                SessionActivity.objects.update_or_create(
+                    user=user,
+                    defaults={
+                        'session_key': request.session.session_key,
+                        'ip_address': get_client_ip(request)
+                    }
+                )
+                return redirect('setup_credentials')
     else:
         form = RegistrationForm()
-    
+        
     return render(request, 'trades/register.html', {'form': form})
+
+def otp_verify_view(request):
+    """Verify numeric OTP to confirm email and activate account"""
+    user_id = request.session.get('registration_user_id')
+    stored_otp = request.session.get('registration_otp')
+    
+    if not user_id or not stored_otp:
+        messages.error(request, "OTP session expired or invalid. Please register again.")
+        return redirect('register')
+        
+    if request.method == 'POST':
+        form = OTPVerifyForm(request.POST)
+        if form.is_valid():
+            entered_otp = form.cleaned_data.get('otp')
+            if entered_otp == stored_otp:
+                try:
+                    user = User.objects.get(id=user_id)
+                    user.is_active = True
+                    user.save()
+                    
+                    # Clean up
+                    del request.session['registration_user_id']
+                    del request.session['registration_otp']
+                    
+                    messages.success(request, "Email verified successfully! Welcome.")
+                    login(request, user)
+                    SessionActivity.objects.update_or_create(
+                        user=user,
+                        defaults={
+                            'session_key': request.session.session_key,
+                            'ip_address': get_client_ip(request)
+                        }
+                    )
+                    return redirect('setup_credentials')
+                except User.DoesNotExist:
+                    messages.error(request, "User account no longer exists.")
+                    return redirect('register')
+            else:
+                form.add_error('otp', "Invalid verification code.")
+    else:
+        form = OTPVerifyForm()
+        
+    return render(request, 'trades/otp_verify.html', {'form': form})
 
 
 def logout_view(request):
@@ -305,6 +392,7 @@ def admin_settings_view(request):
             settings_obj.port = 587
         settings_obj.use_tls = request.POST.get('use_tls') == 'on'
         settings_obj.enable_password_reset = request.POST.get('enable_password_reset') == 'on'
+        settings_obj.enable_registration_otp = request.POST.get('enable_registration_otp') == 'on'
         settings_obj.host_user = request.POST.get('host_user', '')
         settings_obj.from_address = request.POST.get('from_address', '')
         

@@ -63,6 +63,22 @@ class RegistrationForm(UserCreationForm):
                 'placeholder': 'Choose a username'
             }),
         }
+
+    def clean_username(self):
+        username = self.cleaned_data.get("username")
+        # Delete inactive ghost accounts before validation
+        if username:
+            User.objects.filter(username__iexact=username, is_active=False).delete()
+        return super().clean_username()
+
+    def clean_email(self):
+        email = self.cleaned_data.get("email")
+        if email:
+            User.objects.filter(email__iexact=email, is_active=False).delete()
+            if User.objects.filter(email__iexact=email).exists():
+                raise forms.ValidationError("This email is already registered.")
+        return email
+
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -78,13 +94,21 @@ class RegistrationForm(UserCreationForm):
         for field in self.fields:
             if field in ['password1', 'password2']:
                 self.fields[field].help_text = ''
-    
-    def clean_email(self):
-        email = self.cleaned_data.get('email')
-        if User.objects.filter(email=email).exists():
-            raise forms.ValidationError("This email is already registered.")
-        return email
 
+class OTPVerifyForm(forms.Form):
+    """Form to verify email 6-digit OTP code"""
+    otp = forms.CharField(
+        max_length=6,
+        min_length=6,
+        required=True,
+        label="Verification Code",
+        widget=forms.TextInput(attrs={
+            'class': 'form-control form-control-lg text-center fw-bold',
+            'placeholder': '123456',
+            'style': 'letter-spacing: 0.5em; font-family: monospace;',
+            'autocomplete': 'one-time-code'
+        })
+    )
 
 class UserNeoCredentialsForm(forms.ModelForm):
     """Form for managing Neo API credentials"""
