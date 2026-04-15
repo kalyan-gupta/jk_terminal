@@ -278,6 +278,10 @@
                                             {% endif %}
                                         </form>
                                         
+                                        <button type="button" class="btn btn-sm btn-outline-info" title="Reset User Password" onclick="openResetPasswordModal({{ u.id }}, '{{ u.username }}')">
+                                            <i class="bi bi-key-fill"></i>
+                                        </button>
+
                                         <form method="post" action="{% url 'admin_delete_user' u.id %}" class="d-inline" onsubmit="return confirm('Are you sure you want to permanently delete user {{ u.username }}?');">
                                             {% csrf_token %}
                                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete User">
@@ -328,6 +332,47 @@
         </div>
     </div>
     
+    <!-- Reset Target Password Modal -->
+    <div class="modal fade" id="resetPasswordModal" tabindex="-1" aria-labelledby="resetPasswordModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="resetPasswordModalLabel"><i class="bi bi-key-fill me-2"></i>Reset Password: <span id="resetTargetUsername" class="fw-bold text-primary"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="resetPasswordForm" method="post" action="">
+                    <div class="modal-body">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="new_password" class="form-label">New Password</label>
+                            <input type="text" class="form-control" id="new_password" name="new_password" placeholder="Enter new password (8+ characters)" minlength="8" required>
+                            <div class="form-text text-warning"><i class="bi bi-exclamation-triangle-fill"></i> Visible entry to prevent admin typos.</div>
+                        </div>
+                        <div class="mb-3 form-check form-switch mt-3">
+                            <input class="form-check-input" type="checkbox" role="switch" id="force_change" name="force_change">
+                            <label class="form-check-label ms-2" for="force_change">
+                                <strong>Force password change on next login</strong><br>
+                                <span class="text-muted small">The user will be required to configure a completely new password immediately upon using this temporary credential.</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Force Reset</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function openResetPasswordModal(userId, username) {
+            document.getElementById('resetTargetUsername').innerText = username;
+            document.getElementById('resetPasswordForm').action = "/admin-settings/user/" + userId + "/reset-password/";
+            var modal = new bootstrap.Modal(document.getElementById('resetPasswordModal'));
+            modal.show();
+        }
+    </script>
 </body>
 </html>

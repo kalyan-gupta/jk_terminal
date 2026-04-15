@@ -482,6 +482,39 @@ def admin_add_user_view(request):
                     
     return redirect('admin_settings')
 
+
+@login_required_with_session_check
+def admin_reset_user_password(request, user_id):
+    """Forcefully reset a user's password with an optional force-change flag"""
+    if not request.user.is_superuser:
+        messages.error(request, "Access denied. Superuser only.")
+        return redirect('index')
+        
+    if request.method == 'POST':
+        try:
+            target_user = User.objects.get(id=user_id)
+            if target_user == request.user:
+                messages.error(request, "You cannot forcefully reset your own active session account.")
+            else:
+                new_password = request.POST.get('new_password')
+                force_change = request.POST.get('force_change') == 'on'
+                
+                if new_password and len(new_password) >= 8:
+                    target_user.set_password(new_password)
+                    target_user.save()
+                    
+                    security, _ = UserSecurity.objects.get_or_create(user=target_user)
+                    security.force_password_change = force_change
+                    security.save()
+                    
+                    messages.success(request, f"Password for {target_user.username} was forcefully reset successfully.")
+                else:
+                    messages.error(request, "The constructed password must be at least 8 characters.")
+        except User.DoesNotExist:
+            messages.error(request, "User does not exist.")
+            
+    return redirect('admin_settings')
+
 # ==================== Password Management Views ====================
 
 def generate_temp_password(length=8):

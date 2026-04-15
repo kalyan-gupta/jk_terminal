@@ -24,6 +24,7 @@ urlpatterns = [
     path('admin-settings/', views.admin_settings_view, name='admin_settings'),
     path('admin-settings/user/<int:user_id>/toggle/', views.admin_toggle_superuser, name='admin_toggle_superuser'),
     path('admin-settings/user/<int:user_id>/delete/', views.admin_delete_user, name='admin_delete_user'),
+    path('admin-settings/user/<int:user_id>/reset-password/', views.admin_reset_user_password, name='admin_reset_user_password'),
     path('admin-settings/user/add/', views.admin_add_user_view, name='admin_add_user'),
     
     # Trading URLs (Protected)
