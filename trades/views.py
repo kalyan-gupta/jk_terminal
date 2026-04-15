@@ -317,9 +317,82 @@ def admin_settings_view(request):
         messages.success(request, "SMTP settings updated successfully!")
         return redirect('admin_settings')
 
+    users = User.objects.all().order_by('-is_superuser', 'username')
+    registration_form = RegistrationForm()
+
     return render(request, 'trades/admin_settings.html', {
-        'settings': settings_obj
+        'settings': settings_obj,
+        'users': users,
+        'registration_form': registration_form
     })
+
+# ==================== User Management Views (Superuser Only) ====================
+
+@login_required_with_session_check
+def admin_toggle_superuser(request, user_id):
+    """Toggle superuser status"""
+    if not request.user.is_superuser:
+        messages.error(request, "Access denied. Superuser only.")
+        return redirect('index')
+        
+    if request.method == 'POST':
+        try:
+            target_user = User.objects.get(id=user_id)
+            if target_user == request.user:
+                messages.warning(request, "You cannot modify your own superuser status.")
+            else:
+                target_user.is_superuser = not target_user.is_superuser
+                target_user.is_staff = target_user.is_superuser  # Staff matches superuser for access
+                target_user.save()
+                
+                status = "promoted to" if target_user.is_superuser else "demoted from"
+                messages.success(request, f"User {target_user.username} successfully {status} superuser.")
+        except User.DoesNotExist:
+            messages.error(request, "User does not exist.")
+            
+    return redirect('admin_settings')
+
+
+@login_required_with_session_check
+def admin_delete_user(request, user_id):
+    """Forcefully delete a user"""
+    if not request.user.is_superuser:
+        messages.error(request, "Access denied. Superuser only.")
+        return redirect('index')
+        
+    if request.method == 'POST':
+        try:
+            target_user = User.objects.get(id=user_id)
+            if target_user == request.user:
+                messages.error(request, "You cannot delete your own active session account.")
+            else:
+                username = target_user.username
+                target_user.delete()
+                messages.success(request, f"User '{username}' was permanently deleted.")
+        except User.DoesNotExist:
+            messages.error(request, "User does not exist.")
+            
+    return redirect('admin_settings')
+
+
+@login_required_with_session_check
+def admin_add_user_view(request):
+    """Add a new user directly from the admin panel"""
+    if not request.user.is_superuser:
+        messages.error(request, "Access denied. Superuser only.")
+        return redirect('index')
+        
+    if request.method == 'POST':
+        form = RegistrationForm(request.POST)
+        if form.is_valid():
+            new_user = form.save()
+            messages.success(request, f"User '{new_user.username}' created successfully.")
+        else:
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"Creation failed: {field} - {error}")
+                    
+    return redirect('admin_settings')
 
 # ==================== Password Management Views ====================
 
