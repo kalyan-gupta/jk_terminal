@@ -44,12 +44,12 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'trading_platform.middleware.RequestLoggingMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'trading_platform.middleware.RequestLoggingMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'trades.auth_middleware.SessionExpiryMiddleware',
@@ -168,7 +168,7 @@ LOGGING = {
     'formatters': {
         'multiline': {
             '()': 'trading_platform.logging_utils.MultiLineFormatter',
-            'format': '%(asctime)s - %(levelname)s - [%(request_id)s] - %(message)s'
+            'format': '%(asctime)s - %(levelname)s - [%(request_id)s|%(request_user)s] - %(message)s'
         },
     },
     'handlers': {

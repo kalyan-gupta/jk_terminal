@@ -145,6 +145,7 @@ class KotakNeoAPI:
             if account_name == 'Your Account' and hasattr(self, 'login_data') and isinstance(self.login_data, dict):
                 account_name = self.login_data.get('userName', self.login_data.get('clientName', account_name))
 
+            logger.info(f"Fetched account info for '{account_name}' (UCC: {self.credentials.get('UCC', 'unknown')}).")
             return {"account_name": account_name, "account_id": self.credentials['UCC'], "positions": positions}
         except Exception as e:
             logger.error(f"Error fetching account info: {e}", exc_info=True)
@@ -161,9 +162,11 @@ class KotakNeoAPI:
                 if 'error' in holdings_response or 'Error Message' in holdings_response:
                     return {"error": f"Could not fetch holdings: {holdings_response}"}
                 # The holdings are in the 'data' key
+                logger.debug("Successfully fetched holdings data (dict format).")
                 return holdings_response.get('data', [])
             elif isinstance(holdings_response, list):
                 # The client might have already extracted the list
+                logger.debug("Successfully fetched holdings data (list format).")
                 return holdings_response
             else:
                 return []
@@ -181,9 +184,11 @@ class KotakNeoAPI:
                 if 'error' in positions or 'Error Message' in positions:
                     return {"error": f"Could not fetch positions: {positions}"}
                 # The positions are in the 'data' key
+                logger.debug("Successfully fetched positions data (dict format).")
                 return positions.get('data', [])
             elif isinstance(positions, list):
                 # The client might have already extracted the list
+                logger.debug("Successfully fetched positions data (list format).")
                 return positions
             else:
                 return []
@@ -201,6 +206,7 @@ class KotakNeoAPI:
             if isinstance(limits, dict) and ('error' in limits or 'Error Message' in limits):
                 return {"error": f"Could not fetch limits: {limits}"}
 
+            logger.info("Successfully fetched limit information.")
             return limits
         except Exception as e:
             logger.error(f"Error fetching limits: {e}", exc_info=True)
@@ -216,6 +222,7 @@ class KotakNeoAPI:
             if isinstance(report, dict) and ('error' in report or 'Error Message' in report):
                 return {"error": f"Could not fetch order book: {report}"}
 
+            logger.info("Successfully fetched order book report.")
             return report.get('data', [])
         except Exception as e:
             logger.error(f"Error fetching order book: {e}", exc_info=True)
@@ -227,7 +234,10 @@ class KotakNeoAPI:
             return auth_response
 
         try:
-            return self.client.cancel_order(order_id=str(order_id), isVerify=is_verify)
+            logger.info(f"Attempting to cancel order ID: {order_id}")
+            result = self.client.cancel_order(order_id=str(order_id), isVerify=is_verify)
+            logger.info(f"Cancel order successful: {result}")
+            return result
         except Exception as e:
             logger.error(f"Error cancelling order: {e}", exc_info=True)
             return {"error": f"An error occurred while cancelling order: {e}"}
@@ -253,7 +263,9 @@ class KotakNeoAPI:
             # Always include price, set to 0 for market orders
             order_params['price'] = str(price) if price is not None else '0'
             
+            logger.info(f"Attempting to place trade: {order_params}")
             order = self.client.place_order(**order_params)
+            logger.info(f"Place trade API returned: {order}")
             return order
         except Exception as e:
             logger.error(f"Error placing trade: {e}", exc_info=True)
@@ -275,7 +287,10 @@ class KotakNeoAPI:
                 'transaction_type': transaction_type[0].upper(),
                 'price': str(price if price is not None else 0)
             }
-            return self.client.margin_required(**params)
+            logger.debug(f"Checking margin requirements: {params}")
+            margin_result = self.client.margin_required(**params)
+            logger.debug(f"Margin check returned: {margin_result}")
+            return margin_result
         except Exception as e:
             logger.error(f"Error checking margin: {e}", exc_info=True)
             return {"error": f"An error occurred while checking margin: {e}"}

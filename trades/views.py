@@ -13,7 +13,10 @@ import duckdb
 import glob
 import os
 import threading
+import logging
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 _duckdb_connection = duckdb.connect(database=':memory:')
 _duckdb_lock = threading.Lock()
@@ -57,6 +60,7 @@ def login_view(request):
             user = authenticate(request, username=username, password=password)
             
             if user is not None:
+                logger.info(f"User '{username}' authenticated successfully via login page.")
                 login(request, user)
                 # Create or update session activity
                 SessionActivity.objects.update_or_create(
@@ -72,6 +76,7 @@ def login_view(request):
                 next_page = request.GET.get('next', 'index')
                 return redirect(next_page)
             else:
+                logger.warning(f"Failed login attempt for username '{username}'.")
                 messages.error(request, "Invalid username or password.")
     else:
         form = LoginForm()
@@ -137,6 +142,7 @@ def register_view(request):
                 return redirect('otp_verify')
             else:
                 user = form.save()
+                logger.info(f"New user registered: '{user.username}'.")
                 messages.success(request, "Registration successful! Please configure your Neo API credentials.")
                 
                 # Redirect to credentials setup
@@ -205,6 +211,7 @@ def logout_view(request):
         logout_sdk_for_user(request.user)
         SessionActivity.objects.filter(user=request.user).delete()
         logout(request)
+        logger.info(f"User '{username}' logged out.")
         messages.success(request, f"Logged out successfully. Goodbye, {username}!")
     return redirect('login')
 
@@ -856,6 +863,8 @@ def place_trade_ajax(request):
         if not all([instrument_token, trading_symbol, quantity, transaction_type, exchange_segment, product_type]):
             return JsonResponse({'error': 'Required fields are missing.'}, status=400)
 
+        logger.info(f"User '{request.user.username}' attempting to place {transaction_type} trade for {quantity} of {trading_symbol} ({order_type}).")
+
         if order_type == 'MKT':
             price = 0
         elif price is None or price == '':
@@ -903,9 +912,11 @@ def place_trade_ajax(request):
             return JsonResponse({'status': 'error', 'message': api_response['error']}, status=400)
 
         if 'errMsg' in api_response:
+            logger.warning(f"Trade failed for '{request.user.username}': {api_response['errMsg']}")
             return JsonResponse({'status': 'error', 'message': api_response['errMsg']}, status=400)
         
         order_id = api_response.get('nOrdNo', 'N/A')
+        logger.info(f"Trade placed successfully for '{request.user.username}'. Order ID: {order_id}")
         return JsonResponse({'status': 'success', 'message': f"Trade placed successfully! Order ID: {order_id}", 'data': api_response})
 
     except (json.JSONDecodeError, ValueError, TypeError) as e:
@@ -973,6 +984,8 @@ def cancel_order_ajax(request):
         if not order_id:
             return JsonResponse({'error': 'Order ID is required.'}, status=400)
 
+        logger.info(f"User '{request.user.username}' requesting cancellation of order ID: {order_id}")
+
         api = KotakNeoAPI(user=request.user)
         api_response = api.cancel_order(order_id)
         
@@ -1008,6 +1021,7 @@ def search_scrips_ajax(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
     
+    logger.debug(f"User '{request.user.username}' searching scrips for symbol '{symbol}' in {exchange_segment}.")
     results = api.search_scrip(exchange_segment=exchange_segment, symbol=symbol)
 
     if 'error' in results:
@@ -1083,6 +1097,7 @@ def get_ltp(request):
 def index(request):
     """Main trading dashboard - requires authentication"""
     api_response = None
+    logger.info(f"User '{request.user.username}' loading trading dashboard.")
     
     # Check if user has credentials setup
     try:

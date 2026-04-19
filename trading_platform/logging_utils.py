@@ -6,6 +6,7 @@ import atexit
 
 # The context var to hold our request ID
 request_id_var = contextvars.ContextVar('request_id', default='-')
+request_user_var = contextvars.ContextVar('request_user', default='-')
 
 class RequestIDFilter(logging.Filter):
     """
@@ -13,6 +14,7 @@ class RequestIDFilter(logging.Filter):
     """
     def filter(self, record):
         record.request_id = request_id_var.get()
+        record.request_user = request_user_var.get()
         return True
 
 class MultiLineFormatter(logging.Formatter):
@@ -33,8 +35,9 @@ class MultiLineFormatter(logging.Formatter):
             time_str = self.formatTime(record, self.datefmt)
             level = record.levelname
             req_id = getattr(record, 'request_id', '-')
+            req_user = getattr(record, 'request_user', '-')
             
-            prefix = f"{time_str} - {level} - [{req_id}] - "
+            prefix = f"{time_str} - {level} - [{req_id}|{req_user}] - "
             
             # The first line has it applied already by the super().format(). 
             # We apply it to the remaining lines.

@@ -1,13 +1,16 @@
 import time
 import uuid
 import logging
-from trading_platform.logging_utils import request_id_var
+from trading_platform.logging_utils import request_id_var, request_user_var
+
+logger = logging.getLogger('trading_platform.requests')
 
 logger = logging.getLogger('trading_platform.requests')
 
 class RequestLoggingMiddleware:
     """
-    Middleware to assign a unique UUID to each request and log its duration and status asynchronously.
+    Middleware to assign a unique UUID to each request, capture the authenticated user, 
+    and log the duration and status. Placed after AuthenticationMiddleware.
     """
     def __init__(self, get_response):
         self.get_response = get_response
@@ -16,8 +19,17 @@ class RequestLoggingMiddleware:
         # Generate a unique request ID
         req_id = str(uuid.uuid4())
         
-        # Set the request ID in the contextvar for this execution flow
-        token = request_id_var.set(req_id)
+        # Determine the user
+        user_name = '-'
+        if hasattr(request, 'user'):
+            if request.user.is_authenticated:
+                user_name = request.user.username
+            else:
+                user_name = "Anonymous"
+        
+        # Set the variables in the contextvar for this execution flow
+        token_id = request_id_var.set(req_id)
+        token_user = request_user_var.set(user_name)
         
         start_time = time.time()
         
@@ -42,4 +54,5 @@ class RequestLoggingMiddleware:
             
         finally:
             # Always reset the context variable back to its previous state
-            request_id_var.reset(token)
+            request_id_var.reset(token_id)
+            request_user_var.reset(token_user)
