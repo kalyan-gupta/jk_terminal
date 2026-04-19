@@ -728,8 +728,8 @@
 
                         // 1. Update Holdings LTP/PNL
                         const ltpCell = document.getElementById(`ltp-${instrumentSymbol}`);
-                        if (ltpCell && quote.last_price || quote.ltp) {
-                            const lastPrice = parseFloat(quote.last_price || quote.ltp);
+                        if (ltpCell && quote.ltp) {
+                            const lastPrice = parseFloat(quote.ltp);
                             if (!isNaN(lastPrice)) {
                                 ltpCell.innerText = `₹${lastPrice.toFixed(2)}`;
 
@@ -750,8 +750,8 @@
                         
                         // 2. Update Depth Modal if this is the active symbol
                         if (currentDepthSymbol === instrumentSymbol && quote.depth) {
-                            if (quote.last_price || quote.ltp) {
-                                document.getElementById('depth-ltp').textContent = `₹${parseFloat(quote.last_price || quote.ltp).toFixed(2)}`;
+                            if (quote.ltp) {
+                                document.getElementById('depth-ltp').textContent = `₹${parseFloat(quote.ltp).toFixed(2)}`;
                             }
                             
                             if (quote.depth.buy) {
