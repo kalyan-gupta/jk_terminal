@@ -67,3 +67,31 @@ class RequestLoggingMiddleware:
             # Always reset the context variable back to its previous state
             request_id_var.reset(token_id)
             request_user_var.reset(token_user)
+
+class RestartDetectionMiddleware:
+    """
+    Middleware to detect if the server has restarted and force users to re-login.
+    """
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        from django.conf import settings
+        from django.contrib.auth import logout
+        from django.shortcuts import redirect
+        from django.contrib import messages
+
+        # Skip for login/logout views to avoid redirect loops
+        exempt_paths = [settings.LOGIN_URL, '/logout/', '/register/']
+        if any(request.path.startswith(p) for p in exempt_paths):
+            return self.get_response(request)
+
+        if request.user.is_authenticated:
+            session_boot_id = request.session.get('server_boot_id')
+            if session_boot_id != settings.SERVER_BOOT_ID:
+                # Server has restarted, clear the session
+                logout(request)
+                messages.info(request, "The server has restarted. Please login again.")
+                return redirect('login')
+
+        return self.get_response(request)

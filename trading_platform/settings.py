@@ -11,6 +11,8 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import uuid
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -26,6 +28,9 @@ SECRET_KEY = 'django-insecure-v*580nj=cr4_q!@u(n+mopu-^(0tiy+n@z_9q@38mrede6j9#%
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
+
+# Unique ID for the current server process to detect restarts
+SERVER_BOOT_ID = str(uuid.uuid4())
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -50,6 +55,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'trading_platform.middleware.RequestLoggingMiddleware',
+    'trading_platform.middleware.RestartDetectionMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'trades.auth_middleware.SessionExpiryMiddleware',

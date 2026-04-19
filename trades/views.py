@@ -70,6 +70,7 @@ def login_view(request):
                         'ip_address': get_client_ip(request)
                     }
                 )
+                request.session['server_boot_id'] = settings.SERVER_BOOT_ID
                 messages.success(request, f"Welcome back, {username}!")
                 
                 # Redirect to next page or index
@@ -192,6 +193,7 @@ def otp_verify_view(request):
                             'ip_address': get_client_ip(request)
                         }
                     )
+                    request.session['server_boot_id'] = settings.SERVER_BOOT_ID
                     return redirect('setup_credentials')
                 except User.DoesNotExist:
                     messages.error(request, "User account no longer exists.")
