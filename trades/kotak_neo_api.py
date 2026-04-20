@@ -161,7 +161,6 @@ class KotakNeoAPI:
 
         try:
             holdings_response = self.client.holdings()
-            logger.debug(f"Raw holdings response from SDK: {holdings_response}")
             if isinstance(holdings_response, dict):
                 if 'error' in holdings_response or 'Error Message' in holdings_response:
                     return {"error": f"Could not fetch holdings: {holdings_response}"}

@@ -392,12 +392,12 @@
                                 </thead>
                                 <tbody>
                                     {% for holding in holdings %}
-                                    <tr data-instrument="{{ holding.tradingsymbol }}">
+                                    <tr data-token="{{ holding.instrument_token }}" data-exch="{{ holding.exchange_segment }}">
                                         <td class="fw-bold">{{ holding.tradingsymbol }}</td>
                                         <td data-quantity="{{ holding.quantity }}">{{ holding.quantity }}</td>
                                         <td data-avg-price="{{ holding.average_price }}">₹{{ holding.average_price|floatformat:2 }}</td>
-                                        <td id="ltp-{{ holding.tradingsymbol }}" class="fw-bold">₹{{ holding.last_price|floatformat:2 }}</td>
-                                        <td id="pnl-{{ holding.tradingsymbol }}" class="{% if holding.pnl > 0 %}text-success{% elif holding.pnl < 0 %}text-danger{% endif %}">
+                                        <td id="ltp-{{ holding.instrument_token }}" class="fw-bold">₹{{ holding.last_price|floatformat:2 }}</td>
+                                        <td id="pnl-{{ holding.instrument_token }}" class="{% if holding.pnl > 0 %}text-success{% elif holding.pnl < 0 %}text-danger{% endif %}">
                                             ₹{{ holding.pnl|floatformat:2 }}
                                             <i class="bi {% if holding.pnl > 0 %}bi-arrow-up-right{% elif holding.pnl < 0 %}bi-arrow-down-left{% endif %}"></i>
                                         </td>
@@ -718,11 +718,18 @@
 
             tradeSocket.onopen = function(e) {
                 console.log("WebSocket connection established");
-                const instrumentRows = document.querySelectorAll("[data-instrument]");
-                if (instrumentRows.length > 0) {
-                    const instruments = Array.from(instrumentRows).map(row => {
-                        return { "instrument_token": row.dataset.instrument, "exchange_segment": "nse_cm" }; // Adjust segment if needed
+                
+                // Collect instruments from holdings
+                const holdingRows = document.querySelectorAll("[data-token]");
+                let instruments = [];
+                
+                if (holdingRows.length > 0) {
+                    instruments = Array.from(holdingRows).map(row => {
+                        return { "instrument_token": row.dataset.token, "exchange_segment": row.dataset.exch || "nse_cm" };
                     });
+                }
+                
+                if (instruments.length > 0) {
                     console.log("Queuing initial subscriptions:", instruments);
                     pendingSubscriptions.push({
                         'action': 'subscribe',
