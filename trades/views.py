@@ -1213,7 +1213,7 @@ def index(request):
                 processed_holdings.append({
                     'symbol': h.get('symbol', 'N/A'),
                     'tradingsymbol': h.get('displaySymbol', h.get('symbol', 'N/A')),
-                    'instrument_token': str(h.get('instrumentToken', '')),
+                    'instrument_token': str(h.get('exchangeIdentifier', h.get('instrumentToken', ''))),
                     'exchange_segment': h.get('exchangeSegment', 'nse_cm'),
                     'quantity': qty,
                     'average_price': avg_price,
