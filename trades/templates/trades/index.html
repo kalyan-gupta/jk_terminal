@@ -96,6 +96,33 @@
             font-weight: bold;
             text-align: center;
         }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #0dcaf0;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+            box-shadow: 0 0 0 rgba(13, 202, 240, 0.4);
+            animation: pulse 2s infinite;
+            vertical-align: middle;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(13, 202, 240, 0.7);
+            }
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 6px rgba(13, 202, 240, 0);
+            }
+            100% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(13, 202, 240, 0);
+            }
+        }
     </style>
 </head>
 <body>
@@ -518,7 +545,7 @@
                     <div class="modal-header">
                         <div>
                             <h5 class="modal-title">Place Order - <span id="order-scrip-name"></span></h5>
-                            <span class="badge bg-info text-dark mt-1" id="order-ltp-badge">LTP: -</span>
+                            <span class="badge bg-info text-dark mt-1" id="order-ltp-badge"><span class="pulse-dot"></span>LTP: -</span>
                         </div>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
@@ -582,6 +609,43 @@
                             <div class="row mt-2">
                                 <div class="col-12">
                                     <div id="order-margin-result" class="alert alert-info" style="display: none;"></div>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-12 text-center">
+                                    <button type="button" class="btn btn-sm btn-link text-decoration-none" id="toggle-order-depth" data-bs-toggle="collapse" data-bs-target="#order-depth-section">
+                                        <i class="bi bi-chevron-down me-1"></i> Show Market Depth
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="order-depth-section" class="collapse">
+                                <div class="row g-2 mt-2 border-top pt-3">
+                                    <div class="col-md-6 border-end">
+                                        <div class="small fw-bold text-success mb-1 text-center">Buy Depth</div>
+                                        <table class="table table-sm mb-0" style="font-size: 0.75rem;">
+                                            <thead>
+                                                <tr class="text-muted">
+                                                    <th>Price</th>
+                                                    <th>Qty</th>
+                                                    <th>Orders</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="order-buy-depth-body"></tbody>
+                                        </table>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="small fw-bold text-danger mb-1 text-center">Sell Depth</div>
+                                        <table class="table table-sm mb-0" style="font-size: 0.75rem;">
+                                            <thead>
+                                                <tr class="text-muted">
+                                                    <th>Price</th>
+                                                    <th>Qty</th>
+                                                    <th>Orders</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="order-sell-depth-body"></tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         </form>
@@ -762,6 +826,37 @@
             let currentDepthExch = null;
             let currentOrderSymbol = null;
             let currentOrderExch = null;
+
+            // Helper to render depth tables
+            function updateDepthUI(quote, buyBodyId, sellBodyId) {
+                if (!quote.depth) return;
+                
+                if (quote.depth.buy) {
+                    let buyHtml = '';
+                    quote.depth.buy.forEach(level => {
+                        buyHtml += `<tr>
+                            <td class="text-success fw-bold">₹${parseFloat(level.price).toFixed(2)}</td>
+                            <td>${level.quantity}</td>
+                            <td>${level.orders}</td>
+                        </tr>`;
+                    });
+                    const container = document.getElementById(buyBodyId);
+                    if (container) container.innerHTML = buyHtml || '<tr><td colspan="3" class="text-center text-muted">No buy orders</td></tr>';
+                }
+                
+                if (quote.depth.sell) {
+                    let sellHtml = '';
+                    quote.depth.sell.forEach(level => {
+                        sellHtml += `<tr>
+                            <td class="text-danger fw-bold">₹${parseFloat(level.price).toFixed(2)}</td>
+                            <td>${level.quantity}</td>
+                            <td>${level.orders}</td>
+                        </tr>`;
+                    });
+                    const container = document.getElementById(sellBodyId);
+                    if (container) container.innerHTML = sellHtml || '<tr><td colspan="3" class="text-center text-muted">No sell orders</td></tr>';
+                }
+            }
             
             tradeSocket.onmessage = function(e) {
                 const incoming_data = JSON.parse(e.data);
@@ -801,34 +896,18 @@
                             if (quote.ltp) {
                                 document.getElementById('depth-ltp').textContent = `₹${parseFloat(quote.ltp).toFixed(2)}`;
                             }
-                            
-                            if (quote.depth.buy) {
-                                let buyHtml = '';
-                                quote.depth.buy.forEach(level => {
-                                    buyHtml += `<tr>
-                                        <td class="text-success fw-bold">₹${parseFloat(level.price).toFixed(2)}</td>
-                                        <td>${level.quantity}</td>
-                                        <td>${level.orders}</td>
-                                    </tr>`;
-                                });
-                                document.getElementById('buy-depth-body').innerHTML = buyHtml || '<tr><td colspan="3" class="text-center text-muted">No buy orders</td></tr>';
-                            }
-                            
-                            if (quote.depth.sell) {
-                                let sellHtml = '';
-                                quote.depth.sell.forEach(level => {
-                                    sellHtml += `<tr>
-                                        <td class="text-danger fw-bold">₹${parseFloat(level.price).toFixed(2)}</td>
-                                        <td>${level.quantity}</td>
-                                        <td>${level.orders}</td>
-                                    </tr>`;
-                                });
-                                document.getElementById('sell-depth-body').innerHTML = sellHtml || '<tr><td colspan="3" class="text-center text-muted">No sell orders</td></tr>';
-                            }
+                            updateDepthUI(quote, 'buy-depth-body', 'sell-depth-body');
                         }
+
                         // 3. Update Place Order Modal if this is the active symbol
-                        if (currentOrderSymbol === instrumentSymbol && quote.ltp) {
-                            document.getElementById('order-ltp-badge').textContent = `LTP: ₹${parseFloat(quote.ltp).toFixed(2)}`;
+                        if (currentOrderSymbol === instrumentSymbol) {
+                            if (quote.ltp) {
+                                document.getElementById('order-ltp-badge').innerHTML = `<span class="pulse-dot"></span>LTP: ₹${parseFloat(quote.ltp).toFixed(2)}`;
+                            }
+                            const orderDepthSection = document.getElementById('order-depth-section');
+                            if (quote.depth && orderDepthSection && orderDepthSection.classList.contains('show')) {
+                                updateDepthUI(quote, 'order-buy-depth-body', 'order-sell-depth-body');
+                            }
                         }
                     });
                 } else if (incoming_data.message === "Connected and authenticated") {
@@ -1428,6 +1507,44 @@
                 
                 const orderModal = new bootstrap.Modal(document.getElementById('placeOrderModal'));
                 orderModal.show();
+                
+                // --- Depth Section Toggle Logic ---
+                const orderDepthSection = document.getElementById('order-depth-section');
+                const toggleBtn = document.getElementById('toggle-order-depth');
+                
+                // Ensure section is collapsed when opening modal
+                if (orderDepthSection.classList.contains('show')) {
+                    const bsCollapse = bootstrap.Collapse.getInstance(orderDepthSection) || new bootstrap.Collapse(orderDepthSection, {toggle: false});
+                    bsCollapse.hide();
+                }
+                toggleBtn.innerHTML = '<i class="bi bi-chevron-down me-1"></i> Show Market Depth';
+
+                // Listen for collapse events to manage subscriptions
+                orderDepthSection.addEventListener('show.bs.collapse', function () {
+                    toggleBtn.innerHTML = '<i class="bi bi-chevron-up me-1"></i> Hide Market Depth';
+                    if (currentOrderSymbol && currentOrderExch && tradeSocket.readyState === WebSocket.OPEN) {
+                        tradeSocket.send(JSON.stringify({
+                            'action': 'subscribe',
+                            'params': { 
+                                'instrument_tokens': [{ "instrument_token": currentOrderSymbol, "exchange_segment": currentOrderExch }],
+                                'isDepth': true 
+                            }
+                        }));
+                    }
+                });
+
+                orderDepthSection.addEventListener('hide.bs.collapse', function () {
+                    toggleBtn.innerHTML = '<i class="bi bi-chevron-down me-1"></i> Show Market Depth';
+                    if (currentOrderSymbol && currentOrderExch && tradeSocket.readyState === WebSocket.OPEN) {
+                        tradeSocket.send(JSON.stringify({
+                            'action': 'subscribe',
+                            'params': { 
+                                'instrument_tokens': [{ "instrument_token": currentOrderSymbol, "exchange_segment": currentOrderExch }],
+                                'isDepth': false 
+                            }
+                        }));
+                    }
+                });
                 
                 // Add event listener for check margin button
                 document.getElementById('check-margin-btn').addEventListener('click', function() {
