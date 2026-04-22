@@ -110,18 +110,78 @@
         }
 
         @keyframes pulse {
-            0% {
-                transform: scale(0.95);
-                box-shadow: 0 0 0 0 rgba(13, 202, 240, 0.7);
-            }
-            70% {
-                transform: scale(1);
-                box-shadow: 0 0 0 6px rgba(13, 202, 240, 0);
-            }
-            100% {
-                transform: scale(0.95);
-                box-shadow: 0 0 0 0 rgba(13, 202, 240, 0);
-            }
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(13, 202, 240, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(13, 202, 240, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(13, 202, 240, 0); }
+        }
+
+        /* Modern Trade Card Styles */
+        .modal-trade-card .modal-content {
+            border-radius: 1rem;
+            border: none;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        .trade-header-buy { background-color: #e8f5e9 !important; border-bottom: 2px solid #2e7d32; transition: all 0.3s; }
+        .trade-header-sell { background-color: #ffebee !important; border-bottom: 2px solid #d32f2f; transition: all 0.3s; }
+
+        .btn-group-toggle {
+            display: flex;
+            background: #f1f3f4;
+            padding: 4px;
+            border-radius: 8px;
+            width: 100%;
+        }
+
+        .btn-toggle {
+            flex: 1;
+            border: none;
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border-radius: 6px;
+            background: transparent;
+            color: #5f6368;
+            transition: all 0.2s;
+        }
+
+        .btn-toggle.active-buy { background-color: #2e7d32; color: white !important; }
+        .btn-toggle.active-sell { background-color: #d32f2f; color: white !important; }
+        .btn-toggle.active-neutral { background-color: #fff; color: #1a73e8; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+        .trade-input-large {
+            font-size: 1.25rem;
+            font-weight: 700;
+            text-align: center;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .trade-input-large:focus {
+            border-color: #1a73e8;
+            box-shadow: none;
+        }
+
+        .circuit-strip {
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 0.75rem;
+            color: #5f6368;
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+            border: 1px solid #eee;
+        }
+
+        .btn-place-order {
+            padding: 12px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            border-radius: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
     </style>
 </head>
@@ -540,125 +600,116 @@
 
         <!-- Place Order Modal -->
         <div class="modal fade" id="placeOrderModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-lg">
+            <div class="modal-dialog modal-trade-card">
                 <div class="modal-content">
-                    <div class="modal-header">
+                    <div id="trade-modal-header" class="modal-header trade-header-buy">
                         <div>
-                            <h5 class="modal-title">Place Order - <span id="order-scrip-name"></span></h5>
-                            <span class="badge bg-info text-dark mt-1" id="order-ltp-badge"><span class="pulse-dot"></span>LTP: -</span>
+                            <div class="text-uppercase small fw-bold text-muted mb-1">Place Order</div>
+                            <h5 class="modal-title fw-bold" id="order-scrip-name">SYMBOL</h5>
                         </div>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        <div class="text-end">
+                            <div class="badge bg-white text-dark border shadow-sm px-3 py-2" style="font-size: 1rem;">
+                                <span class="pulse-dot"></span><span id="order-ltp-badge-text">LTP: -</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="modal-body">
+                    <div class="modal-body p-4">
                         <form id="place-order-form">
                             {% csrf_token %}
-                            <div class="row g-3">
-                                <input type="hidden" id="order-instrument-token">
-                                <input type="hidden" id="order-exchange-seg">
-                                <input type="hidden" id="order-option-type">
+                            <!-- Hidden Functional Inputs -->
+                            <input type="hidden" id="order-instrument-token">
+                            <input type="hidden" id="order-exchange-seg">
+                            <input type="hidden" id="order-option-type">
+                            <input type="hidden" id="order-trading-symbol">
+                            <select id="transaction-type" style="display: none;"><option value="B">B</option><option value="S">S</option></select>
+                            <select id="order-type" style="display: none;"><option value="L">L</option><option value="MKT">MKT</option></select>
+                            <select id="order-product-type" style="display: none;"><!-- Populated by JS --></select>
 
-                                <div class="col-md-3">
-                                    <label for="order-trading-symbol" class="form-label text-muted small">Symbol</label>
-                                    <input type="text" class="form-control form-control-sm fw-bold" id="order-trading-symbol" readonly>
+                            <!-- Side Selection (Buy/Sell) -->
+                            <div class="btn-group-toggle mb-4 shadow-sm">
+                                <button type="button" class="btn-toggle active-buy" id="btn-side-buy" data-value="B">BUY</button>
+                                <button type="button" class="btn-toggle" id="btn-side-sell" data-value="S">SELL</button>
+                            </div>
+
+                            <div class="row g-4">
+                                <!-- Quantity -->
+                                <div class="col-md-6">
+                                    <label class="form-label text-muted small fw-bold">QUANTITY</label>
+                                    <input type="number" class="form-control trade-input-large" id="order-quantity" min="1" required>
+                                    <div class="text-center mt-1"><small class="text-muted">Lot: <span id="lot-size-text">-</span></small></div>
                                 </div>
-                                <div class="col-md-3">
-                                    <label for="order-type" class="form-label text-muted small">Type</label>
-                                    <select class="form-select form-select-sm" id="order-type">
-                                        <option value="L" selected>Limit</option>
-                                        <option value="MKT">Market</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="order-product-type" class="form-label text-muted small">Product</label>
-                                    <select class="form-select form-select-sm" id="order-product-type">
-                                        <!-- Options populated by JS -->
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="transaction-type" class="form-label text-muted small">Side</label>
-                                    <select class="form-select form-select-sm" id="transaction-type">
-                                        <option value="B" class="text-success">Buy</option>
-                                        <option value="S" class="text-danger">Sell</option>
-                                    </select>
+                                <!-- Price -->
+                                <div class="col-md-6">
+                                    <label class="form-label text-muted small fw-bold">PRICE</label>
+                                    <input type="number" class="form-control trade-input-large" id="order-price" step="0.01" min="0" required>
+                                    <div id="price-range-help" style="display: none;">
+                                        <div class="circuit-strip mt-1">
+                                            <span title="Lower Circuit">L: <span id="lower-circuit-text">-</span></span>
+                                            <span title="Upper Circuit">U: <span id="upper-circuit-text">-</span></span>
+                                        </div>
+                                    </div>
+                                    <div class="text-center mt-1" id="price-help"><small class="text-muted">Tick: <span id="tick-size-text">-</span></small></div>
                                 </div>
                             </div>
+
+                            <!-- Toggles Row -->
                             <div class="row g-3 mt-2">
-                                <div class="col-md-4">
-                                    <label for="order-quantity" class="form-label">Quantity</label>
-                                    <input type="number" class="form-control" id="order-quantity" min="1" required>
-                                    <div class="form-text" id="quantity-help">Lot size: <span id="lot-size-text">-</span></div>
+                                <div class="col-md-6">
+                                    <label class="form-label text-muted small fw-bold">PRODUCT</label>
+                                    <div class="btn-group-toggle" id="product-type-segmented">
+                                        <!-- Populated by JS -->
+                                    </div>
                                 </div>
-                                <div class="col-md-4">
-                                    <label for="order-price" class="form-label">Price</label>
-                                    <input type="number" class="form-control" id="order-price" step="0.01" min="0" required>
-                                    <div class="form-text" id="price-help">Tick size: <span id="tick-size-text">-</span></div>
-                                    <div class="form-text text-primary fw-bold" id="price-range-help" style="display: none;">Range (Unit): <span id="lower-circuit-text">-</span> to <span id="upper-circuit-text">-</span></div>
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="order-total-value" class="form-label">Total Value</label>
-                                    <input type="text" class="form-control" id="order-total-value" readonly>
-                                </div>
-                            </div>
-                            <div class="row g-3 mt-2">
-                                <div class="col-12">
-                                    <div class="alert alert-info" id="order-info">
-                                        <small>Product: <span id="product-type-text">-</span> | Exchange: <span id="exchange-text">-</span> | Option Type: <span id="order-option-type-text">-</span></small>
+                                <div class="col-md-6">
+                                    <label class="form-label text-muted small fw-bold">ORDER TYPE</label>
+                                    <div class="btn-group-toggle" id="order-type-segmented">
+                                        <button type="button" class="btn-toggle active-neutral" data-value="L">LIMIT</button>
+                                        <button type="button" class="btn-toggle" data-value="MKT">MARKET</button>
                                     </div>
                                 </div>
                             </div>
-                            <div class="row mt-2">
-                                <div class="col-12">
-                                    <div id="order-margin-result" class="alert alert-info" style="display: none;"></div>
+
+                            <div class="row mt-4">
+                                <div class="col-md-6">
+                                    <div class="text-muted small mb-1 fw-bold">EST. VALUE</div>
+                                    <div class="h5 fw-bold text-dark" id="order-total-value">₹0.00</div>
                                 </div>
-                            </div>
-                            <div class="row">
-                                <div class="col-12 text-center">
-                                    <button type="button" class="btn btn-sm btn-link text-decoration-none" id="toggle-order-depth" data-bs-toggle="collapse" data-bs-target="#order-depth-section">
-                                        <i class="bi bi-chevron-down me-1"></i> Show Market Depth
+                                <div class="col-md-6 text-end">
+                                    <button type="button" class="btn btn-sm btn-link text-decoration-none p-0" id="toggle-order-depth" data-bs-toggle="collapse" data-bs-target="#order-depth-section">
+                                        <i class="bi bi-chevron-down me-1"></i> Market Depth
                                     </button>
                                 </div>
                             </div>
+
+                            <!-- Market Depth Section -->
                             <div id="order-depth-section" class="collapse">
                                 <div class="row g-2 mt-2 border-top pt-3">
                                     <div class="col-md-6 border-end">
                                         <div class="small fw-bold text-success mb-1 text-center">Buy Depth</div>
-                                        <table class="table table-sm mb-0" style="font-size: 0.75rem;">
-                                            <thead>
-                                                <tr class="text-muted">
-                                                    <th>Price</th>
-                                                    <th>Qty</th>
-                                                    <th>Orders</th>
-                                                </tr>
-                                            </thead>
+                                        <table class="table table-sm mb-0" style="font-size: 0.7rem;">
                                             <tbody id="order-buy-depth-body"></tbody>
                                         </table>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="small fw-bold text-danger mb-1 text-center">Sell Depth</div>
-                                        <table class="table table-sm mb-0" style="font-size: 0.75rem;">
-                                            <thead>
-                                                <tr class="text-muted">
-                                                    <th>Price</th>
-                                                    <th>Qty</th>
-                                                    <th>Orders</th>
-                                                </tr>
-                                            </thead>
+                                        <table class="table table-sm mb-0" style="font-size: 0.7rem;">
                                             <tbody id="order-sell-depth-body"></tbody>
                                         </table>
                                     </div>
                                 </div>
                             </div>
+
+                            <div id="order-margin-result" class="alert alert-info mt-3 py-2 small" style="display: none;"></div>
                         </form>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="button" class="btn btn-outline-success" id="check-margin-btn">
-                            <i class="bi bi-calculator me-1"></i> Check Req Margin
-                        </button>
-                        <button type="button" class="btn btn-primary" id="submit-order-btn">
-                            <i class="bi bi-send-fill me-1"></i> Place Order
-                        </button>
+                    <div class="modal-footer bg-light border-0 p-4 pt-0">
+                        <button type="button" class="btn btn-outline-secondary px-4 me-auto" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-outline-primary px-4" id="check-margin-btn">Margin</button>
+                        <button type="button" class="btn btn-primary btn-place-order px-5 flex-grow-1 ms-2" id="submit-order-btn">BUY</button>
                     </div>
+                </div>
+            </div>
+        </div>
                 </div>
             </div>
         </div>
@@ -901,9 +952,21 @@
 
                         // 3. Update Place Order Modal if this is the active symbol
                         if (currentOrderSymbol === instrumentSymbol) {
+                            const ltpHeader = document.getElementById('order-ltp-badge-text');
+                            const submitBtn = document.getElementById('submit-order-btn');
+                            const side = document.getElementById('transaction-type').value;
+                            
                             if (quote.ltp) {
-                                document.getElementById('order-ltp-badge').innerHTML = `<span class="pulse-dot"></span>LTP: ₹${parseFloat(quote.ltp).toFixed(2)}`;
+                                const formattedLtp = `₹${parseFloat(quote.ltp).toFixed(2)}`;
+                                if (ltpHeader) ltpHeader.textContent = `LTP: ${formattedLtp}`;
+                                
+                                // Update submit button text to be more modern: "BUY @ ₹XXXX"
+                                if (submitBtn) {
+                                    const actionText = side === 'B' ? 'BUY' : 'SELL';
+                                    submitBtn.textContent = `${actionText} @ ${formattedLtp}`;
+                                }
                             }
+                            
                             const orderDepthSection = document.getElementById('order-depth-section');
                             if (quote.depth && orderDepthSection && orderDepthSection.classList.contains('show')) {
                                 updateDepthUI(quote, 'order-buy-depth-body', 'order-sell-depth-body');
@@ -1303,65 +1366,212 @@
                 
                 // Close the action modal
                 const actionModal = bootstrap.Modal.getInstance(document.getElementById('scripActionModal'));
-                actionModal.hide();
-                
-                // Determine product type options based on exchange segment
+                if (actionModal) actionModal.hide();
+
+                // DOM Element References
+                const quantityInput = document.getElementById('order-quantity');
+                const priceInput = document.getElementById('order-price');
+                const orderTypeSelect = document.getElementById('order-type');
+                const totalValueInput = document.getElementById('order-total-value');
+                const orderMarginResult = document.getElementById('order-margin-result');
+                const productSegmented = document.getElementById('product-type-segmented');
                 const productSelect = document.getElementById('order-product-type');
-                productSelect.innerHTML = ''; // Clear existing options
+                
+                // Helper to calculate total value
+                function calculateTotal() {
+                    if (!quantityInput || !priceInput || !totalValueInput) return;
+                    const quantity = parseInt(quantityInput.value) || 0;
+                    const price = parseFloat(priceInput.value) || 0;
+                    const total = quantity * price;
+                    totalValueInput.textContent = `₹${total.toFixed(2)}`;
+                }
+                
+                // Helper to validate quantity
+                function validateQuantity() {
+                    if (!quantityInput) return false;
+                    const quantity = parseInt(quantityInput.value);
+                    if (quantity % lLotSize !== 0) {
+                        quantityInput.setCustomValidity(`Quantity must be in multiples of ${lLotSize}`);
+                        return false;
+                    }
+                    quantityInput.setCustomValidity('');
+                    return true;
+                }
+                
+                // Helper to test if value is an exact multiple of tick size
+                function isMultipleOfTickSize(value, tickSize) {
+                    const valueText = value.toString();
+                    const tickText = tickSize.toString();
+                    const valueDecimals = valueText.includes('.') ? valueText.split('.')[1].length : 0;
+                    const tickDecimals = tickText.includes('.') ? tickText.split('.')[1].length : 0;
+                    const scale = Math.pow(10, Math.max(valueDecimals, tickDecimals));
+                    const intValue = Math.round(value * scale);
+                    const intTick = Math.round(tickSize * scale);
+                    return intValue % intTick === 0;
+                }
+
+                // Helper to validate price
+                function validatePrice() {
+                    if (!priceInput || !orderTypeSelect) return false;
+                    if (orderTypeSelect.value === 'MKT') {
+                        priceInput.setCustomValidity('');
+                        return true;
+                    }
+
+                    const price = parseFloat(priceInput.value);
+                    if (isNaN(price) || price <= 0) {
+                        priceInput.setCustomValidity('Please enter a valid price.');
+                        return false;
+                    }
+
+                    if (!isMultipleOfTickSize(price, dTickSize)) {
+                        priceInput.setCustomValidity(`Price must be in multiples of ${dTickSize}`);
+                        return false;
+                    }
+
+                    // Range validation
+                    if (lowerLimit > 0 && price < lowerLimit) {
+                        priceInput.setCustomValidity(`Price must at least ₹${lowerLimit.toFixed(2)} (Lower Circuit)`);
+                        return false;
+                    }
+                    if (upperLimit > 0 && price > upperLimit) {
+                        priceInput.setCustomValidity(`Price must not exceed ₹${upperLimit.toFixed(2)} (Upper Circuit)`);
+                        return false;
+                    }
+
+                    priceInput.setCustomValidity('');
+                    return true;
+                }
+                
+                // --- Modern UI Sync Helpers ---
+                function syncSide(side) {
+                    const transSelect = document.getElementById('transaction-type');
+                    const header = document.getElementById('trade-modal-header');
+                    const buyBtn = document.getElementById('btn-side-buy');
+                    const sellBtn = document.getElementById('btn-side-sell');
+                    const submitBtn = document.getElementById('submit-order-btn');
+                    
+                    transSelect.value = side;
+                    
+                    if (side === 'B') {
+                        header.className = 'modal-header trade-header-buy';
+                        buyBtn.classList.add('active-buy');
+                        sellBtn.classList.remove('active-sell');
+                        submitBtn.className = 'btn btn-success btn-place-order px-5 flex-grow-1 ms-2';
+                        submitBtn.textContent = 'BUY';
+                    } else {
+                        header.className = 'modal-header trade-header-sell';
+                        sellBtn.classList.add('active-sell');
+                        buyBtn.classList.remove('active-buy');
+                        submitBtn.className = 'btn btn-danger btn-place-order px-5 flex-grow-1 ms-2';
+                        submitBtn.textContent = 'SELL';
+                    }
+                }
+
+                function syncOrderType(type) {
+                    const typeSelect = document.getElementById('order-type');
+                    const priceInput = document.getElementById('order-price');
+                    const buttons = document.querySelectorAll('#order-type-segmented .btn-toggle');
+                    
+                    typeSelect.value = type;
+                    buttons.forEach(btn => {
+                        if (btn.dataset.value === type) btn.classList.add('active-neutral');
+                        else btn.classList.remove('active-neutral');
+                    });
+                    
+                    if (type === 'MKT') {
+                        priceInput.disabled = true;
+                        priceInput.required = false;
+                        priceInput.value = '';
+                    } else {
+                        priceInput.disabled = false;
+                        priceInput.required = true;
+                    }
+                    validatePrice();
+                    calculateTotal();
+                }
+
+                function syncProductType(type) {
+                    const prodSelect = document.getElementById('order-product-type');
+                    const buttons = document.querySelectorAll('#product-type-segmented .btn-toggle');
+                    
+                    prodSelect.value = type;
+                    buttons.forEach(btn => {
+                        if (btn.dataset.value === type) btn.classList.add('active-neutral');
+                        else btn.classList.remove('active-neutral');
+                    });
+                }
+
+                // --- End Sync Helpers ---
+
+                // Determine product type options
+                productSegmented.innerHTML = '';
+                productSelect.innerHTML = ''; 
                 
                 let productOptions = [];
                 let defaultProduct = 'MIS';
 
                 if (pExchSeg === 'nse_cm' || pExchSeg === 'bse_cm') {
-                    productOptions = [
-                        { value: 'CNC', label: 'CNC (Delivery)' },
-                        { value: 'MIS', label: 'MIS (Intraday)' }
-                    ];
+                    productOptions = [{ value: 'CNC', label: 'DELIVERY' }, { value: 'MIS', label: 'INTRADAY' }];
                     defaultProduct = 'CNC';
                 } else if (pExchSeg.includes('_fo')) {
-                    productOptions = [
-                        { value: 'NRML', label: 'NRML (Carry Forward)' },
-                        { value: 'MIS', label: 'MIS (Intraday)' }
-                    ];
+                    productOptions = [{ value: 'NRML', label: 'CARRYFORWARD' }, { value: 'MIS', label: 'INTRADAY' }];
                     defaultProduct = 'NRML';
                 } else {
-                    // Default fallback
-                    productOptions = [{ value: 'MIS', label: 'MIS (Intraday)' }];
+                    productOptions = [{ value: 'MIS', label: 'INTRADAY' }];
                 }
 
                 productOptions.forEach(opt => {
+                    // Hidden Select Option
                     const option = document.createElement('option');
                     option.value = opt.value;
-                    option.textContent = opt.label;
+                    option.textContent = opt.value;
                     productSelect.appendChild(option);
+                    
+                    // Segmented Button
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'btn-toggle';
+                    btn.textContent = opt.label;
+                    btn.dataset.value = opt.value;
+                    btn.onclick = () => syncProductType(opt.value);
+                    productSegmented.appendChild(btn);
                 });
-                productSelect.value = defaultProduct;
                 
-                // Populate order modal
+                // Initialize default state
+                syncSide('B');
+                syncOrderType('L');
+                syncProductType(defaultProduct);
+
+                // Side Toggle Handlers
+                document.getElementById('btn-side-buy').onclick = () => syncSide('B');
+                document.getElementById('btn-side-sell').onclick = () => syncSide('S');
+                
+                // Order Type Toggle Handlers
+                document.querySelectorAll('#order-type-segmented .btn-toggle').forEach(btn => {
+                    btn.onclick = () => syncOrderType(btn.dataset.value);
+                });
+                
+                // Populate modal fields
                 document.getElementById('order-scrip-name').textContent = scripName;
                 document.getElementById('order-trading-symbol').value = pTrdSymbol;
                 document.getElementById('order-instrument-token').value = pSymbol;
                 document.getElementById('order-exchange-seg').value = pExchSeg;
                 document.getElementById('order-option-type').value = pOptionType;
-                document.getElementById('order-option-type-text').textContent = pOptionType;
+                
                 document.getElementById('lot-size-text').textContent = lLotSize;
                 document.getElementById('tick-size-text').textContent = dTickSize.toFixed(2);
-                document.getElementById('product-type-text').textContent = productSelect.value;
-                document.getElementById('exchange-text').textContent = pExchSeg.toUpperCase();
-
-                // Listen for product changes to update the info badge
-                productSelect.onchange = function() {
-                    document.getElementById('product-type-text').textContent = this.value;
-                };
-                document.getElementById('order-ltp-badge').textContent = 'LTP: Loading...';
+                document.getElementById('order-ltp-badge-text').textContent = 'LTP: Loading...';
 
                 fetch(`/get_ltp/?p_symbol=${encodeURIComponent(pSymbol)}&p_exch_seg=${encodeURIComponent(pExchSeg)}`)
                     .then(response => response.json())
                     .then(data => {
                         if (data.ltp) {
-                            document.getElementById('order-ltp-badge').textContent = `LTP: ₹${parseFloat(data.ltp).toFixed(2)}`;
+                            const formatted = `₹${parseFloat(data.ltp).toFixed(2)}`;
+                            document.getElementById('order-ltp-badge-text').textContent = `LTP: ${formatted}`;
+                            document.getElementById('submit-order-btn').textContent = `BUY @ ${formatted}`;
                         } else {
-                            document.getElementById('order-ltp-badge').textContent = 'LTP: N/A';
+                            document.getElementById('order-ltp-badge-text').textContent = 'LTP: N/A';
                         }
                         
                         // Handle circuit limits
@@ -1395,13 +1605,6 @@
                         document.getElementById('order-ltp-badge').textContent = 'LTP: N/A';
                     });
                 
-                // Set up form validation
-                const quantityInput = document.getElementById('order-quantity');
-                const priceInput = document.getElementById('order-price');
-                const orderTypeSelect = document.getElementById('order-type');
-                const totalValueInput = document.getElementById('order-total-value');
-                const orderMarginResult = document.getElementById('order-margin-result');
-                
                 // Reset order result
                 orderMarginResult.style.display = 'none';
                 orderMarginResult.textContent = '';
@@ -1415,83 +1618,9 @@
                 priceInput.step = dTickSize;
                 priceInput.value = '';
                 
-                // Function to calculate total value
-                function calculateTotal() {
-                    const quantity = parseInt(quantityInput.value) || 0;
-                    const price = parseFloat(priceInput.value) || 0;
-                    const total = quantity * price;
-                    totalValueInput.value = `₹${total.toFixed(2)}`;
-                }
-                
-                // Function to validate quantity
-                function validateQuantity() {
-                    const quantity = parseInt(quantityInput.value);
-                    if (quantity % lLotSize !== 0) {
-                        quantityInput.setCustomValidity(`Quantity must be in multiples of ${lLotSize}`);
-                        return false;
-                    }
-                    quantityInput.setCustomValidity('');
-                    return true;
-                }
-                
-                // Helper to test if value is an exact multiple of tick size
-                function isMultipleOfTickSize(value, tickSize) {
-                    const valueText = value.toString();
-                    const tickText = tickSize.toString();
-                    const valueDecimals = valueText.includes('.') ? valueText.split('.')[1].length : 0;
-                    const tickDecimals = tickText.includes('.') ? tickText.split('.')[1].length : 0;
-                    const scale = Math.pow(10, Math.max(valueDecimals, tickDecimals));
-                    const intValue = Math.round(value * scale);
-                    const intTick = Math.round(tickSize * scale);
-                    return intValue % intTick === 0;
-                }
+                // Functions moved to top of scope
 
-                // Function to validate price
-                function validatePrice() {
-                    if (orderTypeSelect.value === 'MKT') {
-                        priceInput.setCustomValidity('');
-                        return true;
-                    }
-
-                    const price = parseFloat(priceInput.value);
-                    if (isNaN(price) || price <= 0) {
-                        priceInput.setCustomValidity('Please enter a valid price.');
-                        return false;
-                    }
-
-                    if (!isMultipleOfTickSize(price, dTickSize)) {
-                        priceInput.setCustomValidity(`Price must be in multiples of ${dTickSize}`);
-                        return false;
-                    }
-
-                    // Range validation
-                    if (lowerLimit > 0 && price < lowerLimit) {
-                        priceInput.setCustomValidity(`Price must be at least ₹${lowerLimit.toFixed(2)} (Lower Circuit)`);
-                        return false;
-                    }
-                    if (upperLimit > 0 && price > upperLimit) {
-                        priceInput.setCustomValidity(`Price must not exceed ₹${upperLimit.toFixed(2)} (Upper Circuit)`);
-                        return false;
-                    }
-
-                    priceInput.setCustomValidity('');
-                    return true;
-                }
-
-                // Handle order type change
-                orderTypeSelect.addEventListener('change', function() {
-                    if (this.value === 'MKT') {
-                        priceInput.disabled = true;
-                        priceInput.required = false;
-                        priceInput.value = '';
-                        totalValueInput.value = '₹0.00';
-                    } else {
-                        priceInput.disabled = false;
-                        priceInput.required = true;
-                    }
-                    validatePrice();
-                    calculateTotal();
-                });
+                // Handle order type change (Removed as it is now handled by syncOrderType)
                 
                 quantityInput.addEventListener('input', function() {
                     validateQuantity();
