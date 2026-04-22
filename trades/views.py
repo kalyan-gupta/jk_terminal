@@ -1094,7 +1094,12 @@ def get_ltp(request):
         return JsonResponse({'error': result['error']}, status=400)
 
     if isinstance(result, list) and len(result) > 0:
-        return JsonResponse({'ltp': result[0].get('ltp')})
+        quote = result[0]
+        return JsonResponse({
+            'ltp': quote.get('ltp'),
+            'lower_circuit': quote.get('low_price_range'),
+            'upper_circuit': quote.get('high_price_range')
+        })
 
     return JsonResponse({'error': 'No quote data received'}, status=400)
 

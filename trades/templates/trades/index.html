@@ -560,6 +560,7 @@
                                     <label for="order-price" class="form-label">Price</label>
                                     <input type="number" class="form-control" id="order-price" step="0.01" min="0" required>
                                     <div class="form-text" id="price-help">Tick size: <span id="tick-size-text">-</span></div>
+                                    <div class="form-text text-primary fw-bold" id="price-range-help" style="display: none;">Range (Unit): <span id="lower-circuit-text">-</span> to <span id="upper-circuit-text">-</span></div>
                                 </div>
                                 <div class="col-md-4">
                                     <label for="order-total-value" class="form-label">Total Value</label>
@@ -1208,6 +1209,8 @@
                 const pOptionType = document.getElementById('modal-data').dataset.pOptionType || '-';
                 const lLotSize = parseInt(document.getElementById('modal-data').dataset.lLotSize) || 1;
                 const dTickSize = parseFloat(document.getElementById('modal-data').dataset.dTickSize) || 0.05;
+                let lowerLimit = 0;
+                let upperLimit = 0;
                 
                 if (!pSymbol || !pTrdSymbol || !pExchSeg) {
                     showNotification('Unable to place order: missing symbol information', 'danger');
@@ -1245,6 +1248,20 @@
                             document.getElementById('order-ltp-badge').textContent = `LTP: ₹${parseFloat(data.ltp).toFixed(2)}`;
                         } else {
                             document.getElementById('order-ltp-badge').textContent = 'LTP: N/A';
+                        }
+                        
+                        // Handle circuit limits
+                        const rangeHelp = document.getElementById('price-range-help');
+                        if (data.lower_circuit && data.upper_circuit) {
+                            lowerLimit = parseFloat(data.lower_circuit);
+                            upperLimit = parseFloat(data.upper_circuit);
+                            document.getElementById('lower-circuit-text').textContent = `₹${lowerLimit.toFixed(2)}`;
+                            document.getElementById('upper-circuit-text').textContent = `₹${upperLimit.toFixed(2)}`;
+                            rangeHelp.style.display = 'block';
+                        } else {
+                            lowerLimit = 0;
+                            upperLimit = 0;
+                            rangeHelp.style.display = 'none';
                         }
                         
                         // Start live updates for this symbol
@@ -1330,6 +1347,16 @@
 
                     if (!isMultipleOfTickSize(price, dTickSize)) {
                         priceInput.setCustomValidity(`Price must be in multiples of ${dTickSize}`);
+                        return false;
+                    }
+
+                    // Range validation
+                    if (lowerLimit > 0 && price < lowerLimit) {
+                        priceInput.setCustomValidity(`Price must be at least ₹${lowerLimit.toFixed(2)} (Lower Circuit)`);
+                        return false;
+                    }
+                    if (upperLimit > 0 && price > upperLimit) {
+                        priceInput.setCustomValidity(`Price must not exceed ₹${upperLimit.toFixed(2)} (Upper Circuit)`);
                         return false;
                     }
 
