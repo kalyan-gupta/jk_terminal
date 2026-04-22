@@ -12,6 +12,7 @@ class LiveQuotesConsumer(WebsocketConsumer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.api = None
+        self.quote_cache = {} # Store last known values per instrument token
 
     def connect(self):
         # Assign a unique session ID to this websocket connection for tracing
@@ -106,48 +107,88 @@ class LiveQuotesConsumer(WebsocketConsumer):
             for item in raw_data:
                 if not isinstance(item, dict): continue
                 
-                normalizeditem = {
-                    'instrument_token': item.get('tk'),
-                    'exchange_segment': item.get('e'),
-                    'symbol': item.get('ts'),
-                    'ltp': item.get('lp') or item.get('ltp') or item.get('last_traded_price'),
-                    'volume': item.get('v') or item.get('volume'),
-                    'open': item.get('o') or item.get('open'),
-                    'high': item.get('h') or item.get('high'),
-                    'low': item.get('lo') or item.get('low'),
-                    'close': item.get('c') or item.get('close'),
-                    'atp': item.get('ap') or item.get('average_price'),
-                    'percent_change': item.get('pc') or item.get('net_change_percentage'),
-                    'request_type': item.get('request_type')
+                token = item.get('tk')
+                if not token:
+                    # If no token, we can't reliably cache it, but we still try to normalize it
+                    # This might happen for some generic non-stock messages
+                    continue
+                
+                # Initialize cache entry for this token if it doesn't exist
+                if token not in self.quote_cache:
+                    self.quote_cache[token] = {
+                        'instrument_token': token,
+                        'exchange_segment': item.get('e'),
+                        'symbol': item.get('ts'),
+                        'ltp': None,
+                        'volume': None,
+                        'open': None,
+                        'high': None,
+                        'low': None,
+                        'close': None,
+                        'atp': None,
+                        'percent_change': None,
+                        'depth': {
+                            'buy': [{'price': None, 'quantity': None, 'orders': None} for _ in range(5)],
+                            'sell': [{'price': None, 'quantity': None, 'orders': None} for _ in range(5)]
+                        }
+                    }
+                
+                cache = self.quote_cache[token]
+                
+                # Update basic fields if they are present in the current message
+                field_mappings = {
+                    'ltp': ['lp', 'ltp', 'last_traded_price'],
+                    'volume': ['v', 'volume'],
+                    'open': ['o', 'open'],
+                    'high': ['h', 'high'],
+                    'low': ['lo', 'low'],
+                    'close': ['c', 'close'],
+                    'atp': ['ap', 'average_price'],
+                    'percent_change': ['pc', 'net_change_percentage'],
+                    'symbol': ['ts'],
+                    'exchange_segment': ['e']
                 }
                 
-                # Handle Depth (using exact keys from NeoWebSocket.py depth_resp_mapping)
-                if any(k in item for k in ['bp', 'sp', 'bq', 'bs']):
-                    normalizeditem['depth'] = {
-                        'buy': [
-                            {'price': item.get('bp'), 'quantity': item.get('bq'), 'orders': item.get('bno1')},
-                            {'price': item.get('bp1'), 'quantity': item.get('bq1'), 'orders': item.get('bno2')},
-                            {'price': item.get('bp2'), 'quantity': item.get('bq2'), 'orders': item.get('bno3')},
-                            {'price': item.get('bp3'), 'quantity': item.get('bq3'), 'orders': item.get('bno4')},
-                            {'price': item.get('bp4'), 'quantity': item.get('bq4'), 'orders': item.get('bno5')},
-                        ],
-                        'sell': [
-                            {'price': item.get('sp'), 'quantity': item.get('bs'), 'orders': item.get('sno1')},
-                            {'price': item.get('sp1'), 'quantity': item.get('bs1'), 'orders': item.get('sno2')},
-                            {'price': item.get('sp2'), 'quantity': item.get('bs2'), 'orders': item.get('sno3')},
-                            {'price': item.get('sp3'), 'quantity': item.get('bs3'), 'orders': item.get('sno4')},
-                            {'price': item.get('sp4'), 'quantity': item.get('bs4'), 'orders': item.get('sno5')},
-                        ]
-                    }
-                elif 'depth' in item:
-                    # If it's already mapped by the SDK (e.g. in SNAP messages)
-                    d = item['depth']
-                    normalizeditem['depth'] = {
-                        'buy': [{'price': b.get('price'), 'quantity': b.get('quantity'), 'orders': b.get('orders')} for b in d.get('buy', [])],
-                        'sell': [{'price': s.get('price'), 'quantity': s.get('quantity'), 'orders': s.get('orders')} for s in d.get('sell', [])]
-                    }
+                for canonical_field, raw_keys in field_mappings.items():
+                    val = None
+                    for k in raw_keys:
+                        if k in item:
+                            val = item[k]
+                            break
+                    if val is not None:
+                        cache[canonical_field] = val
                 
-                normalized_list.append(normalizeditem)
+                # Handle Depth Levels discretely
+                depth_keys = [
+                    ('buy', 0, 'bp', 'bq', 'bno1'), ('buy', 1, 'bp1', 'bq1', 'bno2'),
+                    ('buy', 2, 'bp2', 'bq2', 'bno3'), ('buy', 3, 'bp3', 'bq3', 'bno4'),
+                    ('buy', 4, 'bp4', 'bq4', 'bno5'),
+                    ('sell', 0, 'sp', 'bs', 'sno1'), ('sell', 1, 'sp1', 'bs1', 'sno2'),
+                    ('sell', 2, 'sp2', 'bs2', 'sno3'), ('sell', 3, 'sp3', 'bs3', 'sno4'),
+                    ('sell', 4, 'sp4', 'bs4', 'sno5'),
+                ]
+                
+                for side, idx, p_key, q_key, o_key in depth_keys:
+                    p, q, o = item.get(p_key), item.get(q_key), item.get(o_key)
+                    if p is not None: cache['depth'][side][idx]['price'] = p
+                    if q is not None: cache['depth'][side][idx]['quantity'] = q
+                    if o is not None: cache['depth'][side][idx]['orders'] = o
+
+                # Also handle SDK-normalized depth if present
+                if 'depth' in item:
+                    d = item['depth']
+                    for side in ['buy', 'sell']:
+                        if side in d:
+                            for idx, d_item in enumerate(d[side][:5]):
+                                if d_item.get('price') is not None: cache['depth'][side][idx]['price'] = d_item.get('price')
+                                if d_item.get('quantity') is not None: cache['depth'][side][idx]['quantity'] = d_item.get('quantity')
+                                if d_item.get('orders') is not None: cache['depth'][side][idx]['orders'] = d_item.get('orders')
+                
+                # Add request_type if present (usually not cached as it varies by message)
+                quote_to_send = cache.copy()
+                quote_to_send['request_type'] = item.get('request_type')
+                
+                normalized_list.append(quote_to_send)
 
             if normalized_list:
                 # Log a summary of the quote
