@@ -528,25 +528,30 @@
                             <div class="row g-3">
                                 <input type="hidden" id="order-instrument-token">
                                 <input type="hidden" id="order-exchange-seg">
-                                <input type="hidden" id="order-product-type">
                                 <input type="hidden" id="order-option-type">
 
-                                <div class="col-md-6">
-                                    <label for="order-trading-symbol" class="form-label">Symbol</label>
-                                    <input type="text" class="form-control" id="order-trading-symbol" readonly>
+                                <div class="col-md-3">
+                                    <label for="order-trading-symbol" class="form-label text-muted small">Symbol</label>
+                                    <input type="text" class="form-control form-control-sm fw-bold" id="order-trading-symbol" readonly>
                                 </div>
                                 <div class="col-md-3">
-                                    <label for="order-type" class="form-label">Order Type</label>
-                                    <select class="form-select" id="order-type">
+                                    <label for="order-type" class="form-label text-muted small">Type</label>
+                                    <select class="form-select form-select-sm" id="order-type">
                                         <option value="L" selected>Limit</option>
                                         <option value="MKT">Market</option>
                                     </select>
                                 </div>
                                 <div class="col-md-3">
-                                    <label for="transaction-type" class="form-label">Transaction</label>
-                                    <select class="form-select" id="transaction-type">
-                                        <option value="B">Buy</option>
-                                        <option value="S">Sell</option>
+                                    <label for="order-product-type" class="form-label text-muted small">Product</label>
+                                    <select class="form-select form-select-sm" id="order-product-type">
+                                        <!-- Options populated by JS -->
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="transaction-type" class="form-label text-muted small">Side</label>
+                                    <select class="form-select form-select-sm" id="transaction-type">
+                                        <option value="B" class="text-success">Buy</option>
+                                        <option value="S" class="text-danger">Sell</option>
                                     </select>
                                 </div>
                             </div>
@@ -1221,24 +1226,54 @@
                 const actionModal = bootstrap.Modal.getInstance(document.getElementById('scripActionModal'));
                 actionModal.hide();
                 
-                // Determine product type based on exchange segment
-                let productType = 'MIS';
+                // Determine product type options based on exchange segment
+                const productSelect = document.getElementById('order-product-type');
+                productSelect.innerHTML = ''; // Clear existing options
+                
+                let productOptions = [];
+                let defaultProduct = 'MIS';
+
                 if (pExchSeg === 'nse_cm' || pExchSeg === 'bse_cm') {
-                    productType = 'CNC';
+                    productOptions = [
+                        { value: 'CNC', label: 'CNC (Delivery)' },
+                        { value: 'MIS', label: 'MIS (Intraday)' }
+                    ];
+                    defaultProduct = 'CNC';
+                } else if (pExchSeg.includes('_fo')) {
+                    productOptions = [
+                        { value: 'NRML', label: 'NRML (Carry Forward)' },
+                        { value: 'MIS', label: 'MIS (Intraday)' }
+                    ];
+                    defaultProduct = 'NRML';
+                } else {
+                    // Default fallback
+                    productOptions = [{ value: 'MIS', label: 'MIS (Intraday)' }];
                 }
+
+                productOptions.forEach(opt => {
+                    const option = document.createElement('option');
+                    option.value = opt.value;
+                    option.textContent = opt.label;
+                    productSelect.appendChild(option);
+                });
+                productSelect.value = defaultProduct;
                 
                 // Populate order modal
                 document.getElementById('order-scrip-name').textContent = scripName;
                 document.getElementById('order-trading-symbol').value = pTrdSymbol;
                 document.getElementById('order-instrument-token').value = pSymbol;
                 document.getElementById('order-exchange-seg').value = pExchSeg;
-                document.getElementById('order-product-type').value = productType;
                 document.getElementById('order-option-type').value = pOptionType;
                 document.getElementById('order-option-type-text').textContent = pOptionType;
                 document.getElementById('lot-size-text').textContent = lLotSize;
                 document.getElementById('tick-size-text').textContent = dTickSize.toFixed(2);
-                document.getElementById('product-type-text').textContent = productType;
+                document.getElementById('product-type-text').textContent = productSelect.value;
                 document.getElementById('exchange-text').textContent = pExchSeg.toUpperCase();
+
+                // Listen for product changes to update the info badge
+                productSelect.onchange = function() {
+                    document.getElementById('product-type-text').textContent = this.value;
+                };
                 document.getElementById('order-ltp-badge').textContent = 'LTP: Loading...';
 
                 fetch(`/get_ltp/?p_symbol=${encodeURIComponent(pSymbol)}&p_exch_seg=${encodeURIComponent(pExchSeg)}`)
