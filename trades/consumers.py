@@ -67,14 +67,20 @@ class LiveQuotesConsumer(WebsocketConsumer):
                 isDepth = params.get('isDepth', False)
                 if instruments:
                     logger.info(f"WebSocket action 'subscribe' for user '{self.scope.get('user')}': {instruments} (Depth: {isDepth})")
-                    self.api.subscribe(instruments, on_message=self.on_quote, isIndex=isIndex, isDepth=isDepth)
+                    # To get both LTP (from 'sf' feed) and Depth (from 'dp' feed), 
+                    # we perform a dual subscription when depth is requested.
+                    self.api.subscribe(instruments, on_message=self.on_quote, isIndex=isIndex, isDepth=False)
+                    if isDepth:
+                        self.api.subscribe(instruments, on_message=self.on_quote, isIndex=isIndex, isDepth=True)
             elif action == 'unsubscribe':
                 instruments = params.get('instrument_tokens')
                 isIndex = params.get('isIndex', False)
                 isDepth = params.get('isDepth', False)
                 if instruments:
                     logger.info(f"WebSocket action 'unsubscribe' for user '{self.scope.get('user')}': {instruments}")
-                    self.api.unsubscribe(instruments, isIndex=isIndex, isDepth=isDepth)
+                    self.api.unsubscribe(instruments, isIndex=isIndex, isDepth=False)
+                    if isDepth:
+                        self.api.unsubscribe(instruments, isIndex=isIndex, isDepth=True)
             else:
                 logger.warning(f"Unknown message type received: {action}")
 
