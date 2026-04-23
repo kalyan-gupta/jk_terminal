@@ -847,6 +847,7 @@ def search_scrip_cache(request):
                     CAST(COALESCE("dStrikePrice;", 0) AS DECIMAL) / 100 as dStrikePrice,
                     pScripRefKey,
                     pDesc,
+                    COALESCE(pGroup, '') as pGroup,
                     CAST(COALESCE(dTickSize, dTickSize, 0) AS DECIMAL) / 100 as dTickSize,
                     CAST(COALESCE(lLotSize, 0) AS INTEGER) as lLotSize
                 FROM all_market_data
@@ -855,7 +856,7 @@ def search_scrip_cache(request):
             """
 
             results = _duckdb_connection.execute(query).fetchall()
-            columns = ['pSymbol', 'pExchSeg', 'pSymbolName', 'pTrdSymbol', 'pOptionType', 'pInstType', 'dStrikePrice', 'pScripRefKey', 'pDesc', 'dTickSize', 'lLotSize']
+            columns = ['pSymbol', 'pExchSeg', 'pSymbolName', 'pTrdSymbol', 'pOptionType', 'pInstType', 'dStrikePrice', 'pScripRefKey', 'pDesc', 'pGroup', 'dTickSize', 'lLotSize']
             
             data = [dict(zip(columns, row)) for row in results]
             

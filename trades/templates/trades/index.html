@@ -1370,6 +1370,14 @@
                                     }
                                 }
                                 
+                                // Identify Indexes: empty pGroup in cash markets
+                                if (result.pExchSeg && (result.pExchSeg === 'nse_cm' || result.pExchSeg === 'bse_cm')) {
+                                    if (!result.pGroup || result.pGroup.trim() === '') {
+                                        typeLabel = 'Index';
+                                        typeBadgeClass = 'bg-dark-subtle text-dark-emphasis';
+                                    }
+                                }
+                                
                                 // Determine exchange badge
                                 let exchangeLabel = 'NSE';
                                 let exchangeBadgeClass = 'bg-primary-subtle text-primary-emphasis';
