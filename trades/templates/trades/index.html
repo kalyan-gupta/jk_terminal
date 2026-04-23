@@ -789,6 +789,7 @@
                             <button type="button" class="btn btn-outline-secondary px-3" data-bs-dismiss="modal">Close</button>
                             <button type="button" class="btn btn-outline-primary px-3" id="check-margin-btn">Margin</button>
                             <button type="button" class="btn btn-outline-dark px-3" id="add-to-basket-btn" title="Add to Basket"><i class="bi bi-cart-plus fs-5"></i></button>
+                            <button type="button" class="btn btn-outline-info px-3" id="open-basket-btn-modal" title="Open Basket"><i class="bi bi-basket2-fill fs-5"></i></button>
                             <button type="button" class="btn btn-primary btn-place-order px-4 shadow-sm" id="submit-order-btn" style="min-width: 120px;">BUY</button>
                         </div>
                     </div>
@@ -2441,6 +2442,12 @@
             // Basket Manager handlers
             const basketModalEl = document.getElementById('basketModal');
             document.getElementById('basket-nav-btn').onclick = () => {
+                new bootstrap.Modal(basketModalEl).show();
+            };
+
+            document.getElementById('open-basket-btn-modal').onclick = () => {
+                const orderModal = bootstrap.Modal.getInstance(document.getElementById('placeOrderModal'));
+                if (orderModal) orderModal.hide();
                 new bootstrap.Modal(basketModalEl).show();
             };
 
