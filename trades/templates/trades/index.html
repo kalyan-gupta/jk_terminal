@@ -401,6 +401,39 @@
         .oc-btn-basket:hover { background: #fff4e6; color: #d9480f; }
         .oc-btn-trade { color: #1a73e8; border-color: #1a73e8; }
         .oc-btn-trade:hover { background: #e8f0fe; color: #1557b0; }
+        /* Basket Enhancements */
+        .basket-edit-panel { 
+            background: #f8f9fa; 
+            border-radius: 8px; 
+            margin-top: 10px; 
+            padding: 15px;
+            border: 1px solid #dee2e6;
+            display: none;
+        }
+        .basket-edit-panel.active { display: block; }
+        .basket-item-row { transition: all 0.2s; border-left: 4px solid transparent; }
+        .basket-item-row.buy { border-left-color: #28a745; }
+        .basket-item-row.sell { border-left-color: #dc3545; }
+        
+        .basket-qty-btn, .basket-price-btn {
+            width: 30px; height: 30px; padding: 0; 
+            display: flex; align-items: center; justify-content: center;
+        }
+        
+        .side-toggle-group { display: flex; border-radius: 6px; overflow: hidden; border: 1px solid #dee2e6; width: fit-content; }
+        .side-toggle-btn { 
+            padding: 4px 12px; font-size: 0.75rem; font-weight: bold; cursor: pointer;
+            border: none; background: white; color: #6c757d;
+        }
+        .side-toggle-btn.active-buy { background: #28a745; color: white; }
+        .side-toggle-btn.active-sell { background: #dc3545; color: white; }
+        
+        .basket-ltp-badge { font-family: 'Roboto Mono', monospace; font-size: 0.75rem; padding: 2px 6px; }
+
+        .basket-exch-label { font-size: 0.65rem; font-weight: 800; padding: 1px 4px; border-radius: 3px; }
+        .basket-exch-nse { background: #e7f1ff; color: #0d6efd; }
+        .basket-exch-bse { background: #fef1e7; color: #fd7e14; }
+
     </style>
 </head>
 <body>
@@ -1285,6 +1318,8 @@
             let currentOrderExch = null;
             let currentOrderIsIndex = false;
             let currentOCTokens = new Set(); // Tokens visible in current OC view
+            let currentBasketTokens = new Set(); // Tokens currently in opened basket view
+            let basketItems = [];
             let lastActiveOrderLtp = 0;
 
             // Helper to render depth tables
@@ -1344,6 +1379,14 @@
                             const ocLtpEl = document.getElementById(`oc-ltp-${instrumentSymbol}`);
                             if (ocLtpEl && quote.ltp) {
                                 ocLtpEl.textContent = `₹${parseFloat(quote.ltp).toFixed(2)}`;
+                            }
+                        }
+                        
+                        // Update Basket LTP if open
+                        if (currentBasketTokens.has(instrumentSymbol)) {
+                            const bLtpEl = document.getElementById(`basket-ltp-${instrumentSymbol}`);
+                            if (bLtpEl && quote.ltp) {
+                                bLtpEl.textContent = `LTP: ₹${parseFloat(quote.ltp).toFixed(2)}`;
                             }
                         }
 
@@ -3132,7 +3175,6 @@
             };
 
             // --- Basket Order System JS ---
-            let basketItems = [];
 
             function refreshBasketBadge() {
                 const badge = document.getElementById('basket-badge');
@@ -3213,6 +3255,24 @@
 
             basketModalEl.addEventListener('show.bs.modal', loadBasketItems);
 
+            basketModalEl.onclick = function(e) {
+                if (e.target.closest('.remove-item-btn')) return;
+                if (e.target.closest('.basket-edit-panel')) return;
+                
+                const row = e.target.closest('.basket-item-row');
+                if (row) {
+                    const panel = row.querySelector('.basket-edit-panel');
+                    const isActive = panel.classList.contains('active');
+                    
+                    // Close others
+                    document.querySelectorAll('.basket-edit-panel').forEach(p => p.classList.remove('active'));
+                    
+                    if (!isActive) {
+                        panel.classList.add('active');
+                    }
+                }
+            };
+
             const clearBasketBtn = document.getElementById('clear-basket-btn');
             let clearBasketConfirm = false;
 
@@ -3261,6 +3321,15 @@
                             basketItems = data.basket.sort((a, b) => a.sort_order - b.sort_order);
                             list.innerHTML = '';
                             
+                            // Unsubscribe from old basket tokens
+                            if (currentBasketTokens.size > 0 && tradeSocket.readyState === WebSocket.OPEN) {
+                                tradeSocket.send(JSON.stringify({
+                                    'action': 'unsubscribe',
+                                    'params': { 'instrument_tokens': Array.from(currentBasketTokens).map(t => ({ instrument_token: t })) }
+                                }));
+                            }
+                            currentBasketTokens.clear();
+                            
                             if (basketItems.length === 0) {
                                 list.innerHTML = `
                                     <li class="list-group-item text-center py-5 text-muted" id="basket-empty-msg">
@@ -3271,36 +3340,112 @@
                                 return;
                             }
                             
+                            const newTokens = [];
                             basketItems.forEach(item => {
+                                currentBasketTokens.add(item.instrument_token);
+                                newTokens.push({ instrument_token: item.instrument_token, exchange_segment: item.exchange_segment });
+                                
                                 const li = document.createElement('li');
-                                li.className = 'list-group-item d-flex align-items-center p-3 border-bottom';
+                                li.className = `list-group-item basket-item-row p-0 border-bottom ${item.transaction_type === 'B' ? 'buy' : 'sell'}`;
                                 li.dataset.id = item.id;
                                 
-                                const sideLabel = item.transaction_type === 'B' ? 'BUY' : 'SELL';
+                                const isNSE = item.exchange_segment.includes('nse');
+                                const exchClass = isNSE ? 'basket-exch-nse' : 'basket-exch-bse';
+                                const exchLabel = isNSE ? 'NSE' : 'BSE';
                                 
                                 li.innerHTML = `
-                                    <div class="me-3 cursor-move text-muted">
-                                        <i class="bi bi-grip-vertical fs-4"></i>
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <div class="d-flex justify-content-between align-items-center mb-1">
-                                            <span class="fw-bold">${item.trading_symbol}</span>
-                                            <span class="badge ${item.transaction_type === 'B' ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'} small">${sideLabel}</span>
+                                    <div class="p-3">
+                                        <div class="d-flex align-items-center">
+                                            <div class="me-3 cursor-move text-muted">
+                                                <i class="bi bi-grip-vertical fs-4"></i>
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <div class="d-flex justify-content-between align-items-start mb-1">
+                                                    <div>
+                                                        <span class="basket-exch-label ${exchClass} me-1">${exchLabel}</span>
+                                                        <span class="fw-bold text-dark">${item.display_name}</span>
+                                                        <div class="basket-ltp-badge badge bg-light text-primary border ms-2" id="basket-ltp-${item.instrument_token}">LTP: ...</div>
+                                                    </div>
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <span class="badge ${item.transaction_type === 'B' ? 'bg-success text-white' : 'bg-danger text-white'}">${item.transaction_type === 'B' ? 'BUY' : 'SELL'}</span>
+                                                        <button class="btn btn-sm btn-link text-danger p-0 ms-2 remove-item-btn" data-id="${item.id}" title="Remove"><i class="bi bi-trash"></i></button>
+                                                    </div>
+                                                </div>
+                                                <div class="small text-muted d-flex gap-3 mt-1 basket-meta-labels">
+                                                    <span><i class="bi bi-layers me-1"></i>${item.quantity} Qty</span>
+                                                    <span><i class="bi bi-tag me-1"></i>${item.order_type === 'MKT' ? 'Market' : "₹" + item.price}</span>
+                                                    <span><i class="bi bi-box me-1"></i>${item.product_type}</span>
+                                                </div>
+                                            </div>
+                                            <div class="ms-2 text-muted">
+                                                <i class="bi bi-chevron-down small opacity-50"></i>
+                                            </div>
                                         </div>
-                                        <div class="small text-muted d-flex gap-3">
-                                            <span><i class="bi bi-layers me-1"></i>${item.quantity} Qty</span>
-                                            <span><i class="bi bi-tag me-1"></i>${item.order_type === 'MKT' ? 'Market' : '₹'+item.price}</span>
-                                            <span><i class="bi bi-box me-1"></i>${item.product_type}</span>
+                                        
+                                        <!-- Inline Edit Panel -->
+                                        <div class="basket-edit-panel">
+                                            <div class="row g-2 align-items-end">
+                                                <div class="col-4">
+                                                    <label class="form-label small fw-bold mb-1">Side</label>
+                                                    <div class="side-toggle-group">
+                                                        <button class="side-toggle-btn ${item.transaction_type === 'B' ? 'active-buy' : ''}" onclick="updateBasketItemField(${item.id}, 'transaction_type', 'B')">BUY</button>
+                                                        <button class="side-toggle-btn ${item.transaction_type === 'S' ? 'active-sell' : ''}" onclick="updateBasketItemField(${item.id}, 'transaction_type', 'S')">SELL</button>
+                                                    </div>
+                                                </div>
+                                                <div class="col-4">
+                                                    <label class="form-label small fw-bold mb-1">Product</label>
+                                                    <select class="form-select form-select-sm" onchange="updateBasketItemField(${item.id}, 'product_type', this.value)">
+                                                        ${item.exchange_segment.includes('_cm') ? `
+                                                            <option value="CNC" ${item.product_type === 'CNC' ? 'selected' : ''}>CNC</option>
+                                                            <option value="MIS" ${item.product_type === 'MIS' ? 'selected' : ''}>MIS</option>
+                                                        ` : `
+                                                            <option value="NRML" ${item.product_type === 'NRML' ? 'selected' : ''}>NRML</option>
+                                                            <option value="MIS" ${item.product_type === 'MIS' ? 'selected' : ''}>MIS</option>
+                                                        `}
+                                                    </select>
+                                                </div>
+                                                <div class="col-4 text-end">
+                                                    <label class="form-label small fw-bold mb-1">Type</label>
+                                                    <select class="form-select form-select-sm" onchange="updateBasketItemField(${item.id}, 'order_type', this.value)">
+                                                        <option value="L" ${item.order_type === 'L' ? 'selected' : ''}>LIMIT</option>
+                                                        <option value="MKT" ${item.order_type === 'MKT' ? 'selected' : ''}>MARKET</option>
+                                                    </select>
+                                                </div>
+                                                
+                                                <div class="col-6 mt-3">
+                                                    <label class="form-label small fw-bold mb-1">Quantity</label>
+                                                    <div class="input-group input-group-sm">
+                                                        <button class="btn btn-outline-secondary px-2" onclick="adjustBasketVal(${item.id}, 'qty', -${item.lot_size})">-</button>
+                                                        <input type="number" class="form-control text-center basket-qty-input" data-id="${item.id}" value="${item.quantity}" step="${item.lot_size}" onchange="updateBasketItemField(${item.id}, 'quantity', this.value)">
+                                                        <button class="btn btn-outline-secondary px-2" onclick="adjustBasketVal(${item.id}, 'qty', ${item.lot_size})">+</button>
+                                                    </div>
+                                                </div>
+                                                <div class="col-6 mt-3">
+                                                    <label class="form-label small fw-bold mb-1">Price</label>
+                                                    <div class="input-group input-group-sm">
+                                                        <button class="btn btn-outline-secondary px-2" ${item.order_type === 'MKT' ? 'disabled' : ''} onclick="adjustBasketVal(${item.id}, 'price', -${item.tick_size})">-</button>
+                                                        <input type="number" class="form-control text-center basket-price-input" data-id="${item.id}" value="${item.price}" step="${item.tick_size}" ${item.order_type === 'MKT' ? 'disabled' : ''} onchange="updateBasketItemField(${item.id}, 'price', this.value)">
+                                                        <button class="btn btn-outline-secondary px-2" ${item.order_type === 'MKT' ? 'disabled' : ''} onclick="adjustBasketVal(${item.id}, 'price', ${item.tick_size})">+</button>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="ms-3">
-                                        <button class="btn btn-sm btn-outline-danger remove-item-btn" data-id="${item.id}">
-                                            <i class="bi bi-x-lg"></i>
-                                        </button>
                                     </div>
                                 `;
                                 list.appendChild(li);
                             });
+
+                            // Subscribe to new tokens
+                            if (newTokens.length > 0 && tradeSocket.readyState === WebSocket.OPEN) {
+                                tradeSocket.send(JSON.stringify({
+                                    'action': 'subscribe',
+                                    'params': { 
+                                        'instrument_tokens': newTokens,
+                                        'isDepth': false,
+                                        'isIndex': false
+                                    }
+                                }));
+                            }
 
                             // Initialize Sortable
                             new Sortable(list, {
@@ -3325,6 +3470,97 @@
                         }
                     });
             }
+
+            window.adjustBasketVal = function(id, field, delta) {
+                const selector = field === 'qty' ? `.basket-qty-input[data-id="${id}"]` : `.basket-price-input[data-id="${id}"]`;
+                const input = document.querySelector(selector);
+                if (input) {
+                    const step = parseFloat(input.step) || 1;
+                    let val = parseFloat(input.value) || 0;
+                    val = Math.max(0, val + delta);
+                    input.value = val.toFixed(2).replace(/\.?0+$/, '');
+                    updateBasketItemField(id, field === 'qty' ? 'quantity' : 'price', input.value);
+                }
+            };
+
+            window.updateBasketItemField = function(id, field, value) {
+                const item = basketItems.find(i => i.id === id);
+                if (!item) return;
+                
+                const updatedData = {
+                    order_id: id,
+                    quantity: field === 'quantity' ? value : item.quantity,
+                    price: field === 'price' ? value : item.price,
+                    transaction_type: field === 'transaction_type' ? value : item.transaction_type,
+                    product_type: field === 'product_type' ? value : item.product_type,
+                    order_type: field === 'order_type' ? value : item.order_type
+                };
+                
+                fetch('/basket/update_item/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify(updatedData)
+                })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.status === 'success') {
+                        // Minimal refresh: only update current item in basketItems to prevent full re-render flickering
+                        Object.assign(item, {
+                            quantity: updatedData.quantity,
+                            price: updatedData.price,
+                            transaction_type: updatedData.transaction_type,
+                            product_type: updatedData.product_type,
+                            order_type: updatedData.order_type
+                        });
+                        
+                        // BUT we need to update the small labels in the li without closing the panel
+                        const li = document.querySelector(`.basket-item-row[data-id="${id}"]`);
+                        if (li) {
+                            const badge = li.querySelector('.badge');
+                            badge.className = `badge ${updatedData.transaction_type === 'B' ? 'bg-success text-white' : 'bg-danger text-white'}`;
+                            badge.textContent = updatedData.transaction_type === 'B' ? 'BUY' : 'SELL';
+                            li.className = `list-group-item basket-item-row p-0 border-bottom ${updatedData.transaction_type === 'B' ? 'buy' : 'sell'}`;
+                            
+                            const metaRow = li.querySelector('.basket-meta-labels');
+                            metaRow.innerHTML = `
+                                <span><i class="bi bi-layers me-1"></i>${updatedData.quantity} Qty</span>
+                                <span><i class="bi bi-tag me-1"></i>${updatedData.order_type === 'MKT' ? 'Market' : "₹" + updatedData.price}</span>
+                                <span><i class="bi bi-box me-1"></i>${updatedData.product_type}</span>
+                            `;
+                            
+                            // Update side toggle buttons if it was a trantype change
+                            if (field === 'transaction_type') {
+                                const btns = li.querySelectorAll('.side-toggle-btn');
+                                btns.forEach(btn => {
+                                    if (btn.textContent.trim() === 'BUY') {
+                                        if (value === 'B') btn.classList.add('active-buy');
+                                        else btn.classList.remove('active-buy');
+                                    } else {
+                                        if (value === 'S') btn.classList.add('active-sell');
+                                        else btn.classList.remove('active-sell');
+                                    }
+                                });
+                            }
+                            
+                            // Disable/Enable price input if order_type changed
+                            if (field === 'order_type') {
+                                const priceInput = li.querySelector('.basket-price-input');
+                                const priceBtns = li.querySelectorAll('.basket-edit-panel .col-6:last-child button');
+                                if (value === 'MKT') {
+                                    priceInput.disabled = true;
+                                    priceBtns.forEach(b => b.disabled = true);
+                                } else {
+                                    priceInput.disabled = false;
+                                    priceBtns.forEach(b => b.disabled = false);
+                                }
+                            }
+                        }
+                    }
+                });
+            };
 
             function updateBasketSequence(sequence) {
                 fetch('/basket/update_sequence/', {

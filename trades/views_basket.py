@@ -16,20 +16,45 @@ def add_to_basket_ajax(request):
     try:
         data = json.loads(request.body)
         
+        token = data.get('instrument_token')
+        exch = data.get('exchange_segment')
+        qty = int(data.get('quantity'))
+        price = float(data.get('price', 0))
+        ttype = data.get('transaction_type')
+        ptype = data.get('product_type')
+        otype = data.get('order_type', 'L')
+
+        # Aggregation logic: Check for identical order
+        existing = BasketOrder.objects.filter(
+            user=request.user,
+            instrument_token=token,
+            exchange_segment=exch,
+            transaction_type=ttype,
+            product_type=ptype,
+            order_type=otype,
+            price=price
+        ).first()
+
+        if existing:
+            existing.quantity += qty
+            existing.save()
+            logger.info(f"Updated quantity for {existing.trading_symbol} in basket.")
+            return JsonResponse({'status': 'success', 'message': f"Updated quantity for {existing.trading_symbol}.", 'item_id': existing.id})
+        
         # Get max sort_order for user
         max_order = BasketOrder.objects.filter(user=request.user).aggregate(Max('sort_order'))['sort_order__max']
         next_order = (max_order or 0) + 1
         
         basket_item = BasketOrder.objects.create(
             user=request.user,
-            instrument_token=data.get('instrument_token'),
-            exchange_segment=data.get('exchange_segment'),
+            instrument_token=token,
+            exchange_segment=exch,
             trading_symbol=data.get('trading_symbol'),
-            quantity=int(data.get('quantity')),
-            price=float(data.get('price', 0)),
-            transaction_type=data.get('transaction_type'),
-            product_type=data.get('product_type'),
-            order_type=data.get('order_type', 'L'),
+            quantity=qty,
+            price=price,
+            transaction_type=ttype,
+            product_type=ptype,
+            order_type=otype,
             sort_order=next_order
         )
         
@@ -45,8 +70,76 @@ def add_to_basket_ajax(request):
 
 @ajax_login_required
 def get_basket_ajax(request):
-    orders = BasketOrder.objects.filter(user=request.user).values()
-    return JsonResponse({'status': 'success', 'basket': list(orders)})
+    import duckdb
+    import os
+    from django.conf import settings
+    
+    orders = BasketOrder.objects.filter(user=request.user).order_by('sort_order', 'created_at')
+    basket_data = []
+    
+    if orders.exists():
+        # Get metadata for all tokens in basket from DuckDB
+        tokens = [o.instrument_token for o in orders]
+        token_str = ", ".join([f"'{t}'" for t in tokens])
+        
+        try:
+            db_path = os.path.join(settings.BASE_DIR, 'scrip_cache.duckdb')
+            conn = duckdb.connect(db_path)
+            # Fetch lot_size, tick_size, pDesc etc.
+            metadata = conn.execute(f"""
+                SELECT pSymbol, pSymbolName, pDesc, dTickSize, lLotSize 
+                FROM active_market_data 
+                WHERE pSymbol IN ({token_str})
+            """).df().set_index('pSymbol').to_dict('index')
+            conn.close()
+        except Exception as e:
+            logger.error(f"DuckDB error in get_basket: {e}")
+            metadata = {}
+
+        for o in orders:
+            item = {
+                'id': o.id,
+                'instrument_token': o.instrument_token,
+                'exchange_segment': o.exchange_segment,
+                'trading_symbol': o.trading_symbol,
+                'quantity': o.quantity,
+                'price': o.price,
+                'transaction_type': o.transaction_type,
+                'product_type': o.product_type,
+                'order_type': o.order_type,
+                'sort_order': o.sort_order,
+                'created_at': o.created_at.isoformat(),
+            }
+            # Add metadata if found
+            meta = metadata.get(o.instrument_token, {})
+            item['display_name'] = meta.get('pSymbolName', o.trading_symbol)
+            item['desc'] = meta.get('pDesc', '')
+            item['tick_size'] = float(meta.get('dTickSize', 0.05))
+            item['lot_size'] = int(meta.get('lLotSize', 1))
+            basket_data.append(item)
+            
+    return JsonResponse({'status': 'success', 'basket': basket_data})
+
+@ajax_login_required
+def update_basket_item_ajax(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST requests are allowed'}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        order_id = data.get('order_id')
+        
+        BasketOrder.objects.filter(user=request.user, id=order_id).update(
+            quantity=int(data.get('quantity')),
+            price=float(data.get('price', 0)),
+            transaction_type=data.get('transaction_type'),
+            product_type=data.get('product_type'),
+            order_type=data.get('order_type')
+        )
+        return JsonResponse({'status': 'success', 'message': 'Basket item updated.'})
+    except Exception as e:
+        logger.error(f"Error updating basket item: {e}")
+        return JsonResponse({'error': str(e)}, status=400)
 
 @ajax_login_required
 def remove_from_basket_ajax(request):
