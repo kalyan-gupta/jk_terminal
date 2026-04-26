@@ -368,6 +368,28 @@
             filter: blur(0.5px);
         }
         .oc-expiry-item:hover:not(.active) { opacity: 0.8; transform: scale(0.9); }
+        .oc-row:hover { background-color: rgba(26, 115, 232, 0.02); }
+        .oc-atm-row { background-color: rgba(255, 193, 7, 0.05); }
+        .oc-atm-row .oc-strike-cell { 
+            background: #fff3cd !important; 
+            color: #856404 !important;
+            border: 2px solid #ffc107 !important;
+            border-top: none;
+            border-bottom: none;
+            position: relative;
+        }
+        .oc-atm-row .oc-strike-cell::after {
+            content: 'ATM';
+            position: absolute;
+            top: -2px;
+            right: 2px;
+            font-size: 0.5rem;
+            background: #ffc107;
+            color: #000;
+            padding: 1px 3px;
+            border-radius: 3px;
+            font-weight: 800;
+        }
     </style>
 </head>
 <body>
@@ -693,7 +715,10 @@
                             <i class="bi bi-layers-half text-white"></i>
                         </div>
                         <div>
-                            <h5 class="modal-title mb-0 fw-bold" id="oc-symbol-name">Option Chain</h5>
+                            <h5 class="modal-title mb-0 fw-bold d-flex align-items-center">
+                                <span id="oc-symbol-name">Option Chain</span>
+                                <span class="badge bg-white text-dark ms-3 border py-1 px-2" id="oc-underlying-ltp" style="font-size: 0.9rem; font-family: 'Roboto Mono', monospace;">LTP: Loading...</span>
+                            </h5>
                             <span class="text-white-50 small" id="oc-underlying-desc"></span>
                         </div>
                     </div>
@@ -1283,6 +1308,16 @@
                         if (!quote) return;
                         
                         const instrumentSymbol = quote.instrument_token;
+                        
+                        // Update Option Chain Underlying LTP if open
+                        if (instrumentSymbol === currentOCUnderlyingSymbol) {
+                            currentUnderlyingLtp = parseFloat(quote.ltp);
+                            const badge = document.getElementById('oc-underlying-ltp');
+                            if (badge && !isNaN(currentUnderlyingLtp)) {
+                                badge.textContent = `LTP: ₹${currentUnderlyingLtp.toFixed(2)}`;
+                                updateATMHighlight();
+                            }
+                        }
                         
                         // Update Option Chain if open
                         if (currentOCTokens.has(instrumentSymbol)) {
@@ -2211,15 +2246,26 @@
             let ocData = null;
             let currentOCExpiry = null;
             let currentOCTokensWithExch = []; // Track tokens + exch for proper unsubscription
+            let currentOCUnderlyingSymbol = null;
+            let currentOCUnderlyingExch = null;
+            let currentOCUnderlyingIsIndex = false;
+            let currentUnderlyingLtp = 0;
 
             document.getElementById('modal-option-chain-btn').addEventListener('click', function() {
                 const symbol = document.getElementById('modal-data').dataset.pSymbol;
                 const name = document.getElementById('modal-data').dataset.displayName;
                 const desc = document.getElementById('modal-data').dataset.pDesc;
+                const exch = document.getElementById('modal-data').dataset.pExchSeg;
+                const isIndex = document.getElementById('modal-data').dataset.isIndex === 'true';
                 
                 document.getElementById('oc-symbol-name').textContent = name;
                 document.getElementById('oc-underlying-desc').textContent = desc;
                 
+                currentOCUnderlyingSymbol = symbol;
+                currentOCUnderlyingExch = exch;
+                currentOCUnderlyingIsIndex = isIndex;
+                currentUnderlyingLtp = 0;
+
                 const actionModal = bootstrap.Modal.getInstance(document.getElementById('scripActionModal'));
                 if (actionModal) actionModal.hide();
                 
@@ -2246,6 +2292,30 @@
                     .catch(err => {
                         console.error('OC Fetch Error:', err);
                         showNotification('Failed to load option chain.', 'danger');
+                    });
+                
+                // Subscribe to underlying LTP
+                fetch(`/get_ltp/?p_symbol=${encodeURIComponent(symbol)}&p_exch_seg=${encodeURIComponent(exch)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.ltp) {
+                            currentUnderlyingLtp = parseFloat(data.ltp);
+                            const badge = document.getElementById('oc-underlying-ltp');
+                            if (badge) badge.textContent = `LTP: ₹${currentUnderlyingLtp.toFixed(2)}`;
+                            updateATMHighlight();
+                            setTimeout(scrollToATM, 500); // Wait for table to render
+                        }
+                        
+                        if (tradeSocket.readyState === WebSocket.OPEN) {
+                            tradeSocket.send(JSON.stringify({
+                                'action': 'subscribe',
+                                'params': { 
+                                    'instrument_tokens': [{ "instrument_token": symbol, "exchange_segment": exch }],
+                                    'isDepth': false,
+                                    'isIndex': isIndex
+                                }
+                            }));
+                        }
                     });
             });
 
@@ -2276,6 +2346,7 @@
                         item.classList.add('active');
                         item.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
                         renderChain(exp);
+                        setTimeout(scrollToATM, 300);
                     };
                     dial.appendChild(item);
                 });
@@ -2318,7 +2389,7 @@
                                 <button class="btn btn-link oc-action-btn oc-btn-basket p-0" title="Add to Basket" onclick="addToBasketFromOC('${ce.pSymbol}', '${ce.pExchSeg}', '${ce.pTrdSymbol}', ${ce.lLotSize})"><i class="bi bi-cart-plus"></i></button>
                             </div>` : ''}
                         </td>
-                        <td class="oc-strike-cell">₹${row.strike}</td>
+                        <td class="oc-strike-cell" data-strike="${row.strike}">₹${row.strike}</td>
                         <td class="align-middle">
                             ${pe ? `
                             <div class="oc-action-icons">
@@ -2331,7 +2402,39 @@
                     body.appendChild(tr);
                 });
                 
+                updateATMHighlight();
                 subscribeOCTokens();
+            }
+
+            function updateATMHighlight() {
+                if (!currentUnderlyingLtp || !ocData || !currentOCExpiry) return;
+                
+                let closestStrike = null;
+                let minDiff = Infinity;
+                
+                const rows = ocData.chain[currentOCExpiry];
+                if (!rows) return;
+                
+                rows.forEach(row => {
+                    const diff = Math.abs(row.strike - currentUnderlyingLtp);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestStrike = row.strike;
+                    }
+                });
+                
+                document.querySelectorAll('.oc-row').forEach(tr => tr.classList.remove('oc-atm-row'));
+                const atmCell = document.querySelector(`.oc-strike-cell[data-strike="${closestStrike}"]`);
+                if (atmCell) {
+                    atmCell.parentElement.classList.add('oc-atm-row');
+                }
+            }
+
+            function scrollToATM() {
+                const atmRow = document.querySelector('.oc-atm-row');
+                if (atmRow) {
+                    atmRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
             }
 
             window.openTradeFromOC = function(pSymbol, pExchSeg, pTrdSymbol, displayName, lLotSize, dTickSize) {
@@ -2395,9 +2498,24 @@
             }
 
             ocModalEl.addEventListener('hidden.bs.modal', function() {
+                // Clear underlying subscription
+                if (currentOCUnderlyingSymbol && currentOCUnderlyingExch && tradeSocket.readyState === WebSocket.OPEN) {
+                    tradeSocket.send(JSON.stringify({
+                        'action': 'unsubscribe',
+                        'params': { 
+                            'instrument_tokens': [{ "instrument_token": currentOCUnderlyingSymbol, "exchange_segment": currentOCUnderlyingExch }],
+                            'isDepth': false,
+                            'isIndex': currentOCUnderlyingIsIndex
+                        }
+                    }));
+                }
+                
                 unsubscribeOCTokens();
                 currentOCTokens.clear();
                 currentOCTokensWithExch = [];
+                currentOCUnderlyingSymbol = null;
+                currentOCUnderlyingExch = null;
+                currentUnderlyingLtp = 0;
             });
 
             // Trigger inline re-authentication modal
