@@ -390,6 +390,17 @@
             border-radius: 3px;
             font-weight: 800;
         }
+        .oc-action-icons { display: flex; gap: 0.3rem; justify-content: center; align-items: center; }
+        .oc-select-btn { 
+            width: 32px; height: 32px; padding: 0; display: flex; 
+            align-items: center; justify-content: center; border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .oc-select-btn.active { background: #fd7e14; color: white; border-color: #fd7e14; }
+        .oc-btn-basket { color: #fd7e14; border-color: #fd7e14; }
+        .oc-btn-basket:hover { background: #fff4e6; color: #d9480f; }
+        .oc-btn-trade { color: #1a73e8; border-color: #1a73e8; }
+        .oc-btn-trade:hover { background: #e8f0fe; color: #1557b0; }
     </style>
 </head>
 <body>
@@ -722,7 +733,16 @@
                             <span class="text-white-50 small" id="oc-underlying-desc"></span>
                         </div>
                     </div>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <div class="ms-auto d-flex align-items-center gap-2">
+                        <button id="oc-bulk-basket-btn" class="btn btn-warning btn-sm fw-bold px-3 shadow-sm" style="display: none;" onclick="addOCSelectionToBasket()">
+                            <i class="bi bi-cart-plus-fill me-1"></i> Add (<span id="oc-selected-count">0</span>) to Basket
+                        </button>
+                        <button class="btn btn-outline-light btn-sm px-3" onclick="openBasketFromOC()">
+                            <i class="bi bi-basket2 me-1"></i> Basket
+                        </button>
+                        <span class="vr mx-1 bg-white opacity-25"></span>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
                 </div>
                 <div class="modal-body p-0">
                     <!-- Modern Expiry Dial -->
@@ -2246,6 +2266,7 @@
             let ocData = null;
             let currentOCExpiry = null;
             let currentOCTokensWithExch = []; // Track tokens + exch for proper unsubscription
+            let ocSelectedInstruments = new Map(); // token -> {exch, symbol, lot}
             let currentOCUnderlyingSymbol = null;
             let currentOCUnderlyingExch = null;
             let currentOCUnderlyingIsIndex = false;
@@ -2265,6 +2286,10 @@
                 currentOCUnderlyingExch = exch;
                 currentOCUnderlyingIsIndex = isIndex;
                 currentUnderlyingLtp = 0;
+                
+                // Clear selections when opening a new underlying
+                ocSelectedInstruments.clear();
+                updateOCBulkButton();
 
                 const actionModal = bootstrap.Modal.getInstance(document.getElementById('scripActionModal'));
                 if (actionModal) actionModal.hide();
@@ -2371,6 +2396,9 @@
                     const ce = row.CE;
                     const pe = row.PE;
                     
+                    const isCESelected = ce && ocSelectedInstruments.has(ce.pSymbol);
+                    const isPESelected = pe && ocSelectedInstruments.has(pe.pSymbol);
+
                     if (ce) {
                         currentOCTokens.add(ce.pSymbol);
                         currentOCTokensWithExch.push({ instrument_token: ce.pSymbol, exchange_segment: ce.pExchSeg });
@@ -2385,16 +2413,16 @@
                         <td class="align-middle">
                             ${ce ? `
                             <div class="oc-action-icons">
-                                <button class="btn btn-link oc-action-btn oc-btn-trade p-0" title="Trade" onclick="openTradeFromOC('${ce.pSymbol}', '${ce.pExchSeg}', '${ce.pTrdSymbol}', \`${ce.pSymbolName}\`, ${ce.lLotSize}, ${ce.dTickSize})"><i class="bi bi-plus-circle"></i></button>
-                                <button class="btn btn-link oc-action-btn oc-btn-basket p-0" title="Add to Basket" onclick="addToBasketFromOC('${ce.pSymbol}', '${ce.pExchSeg}', '${ce.pTrdSymbol}', ${ce.lLotSize})"><i class="bi bi-cart-plus"></i></button>
+                                <button class="btn btn-outline-light oc-btn-trade oc-select-btn p-0" title="Trade" onclick="openTradeFromOC('${ce.pSymbol}', '${ce.pExchSeg}', '${ce.pTrdSymbol}', \`${ce.pSymbolName}\`, ${ce.lLotSize}, ${ce.dTickSize})"><i class="bi bi-plus"></i></button>
+                                <button class="btn btn-outline-warning oc-btn-basket oc-select-btn p-0 ${isCESelected ? 'active' : ''}" title="Toggle Selection" onclick="toggleOCItemSelection(this, '${ce.pSymbol}', '${ce.pExchSeg}', '${ce.pTrdSymbol}', ${ce.lLotSize})"><i class="bi bi-cart-plus"></i></button>
                             </div>` : ''}
                         </td>
                         <td class="oc-strike-cell" data-strike="${row.strike}">₹${row.strike}</td>
                         <td class="align-middle">
                             ${pe ? `
                             <div class="oc-action-icons">
-                                <button class="btn btn-link oc-action-btn oc-btn-basket p-0" title="Add to Basket" onclick="addToBasketFromOC('${pe.pSymbol}', '${pe.pExchSeg}', '${pe.pTrdSymbol}', ${pe.lLotSize})"><i class="bi bi-cart-plus"></i></button>
-                                <button class="btn btn-link oc-action-btn oc-btn-trade p-0" title="Trade" onclick="openTradeFromOC('${pe.pSymbol}', '${pe.pExchSeg}', '${pe.pTrdSymbol}', \`${pe.pSymbolName}\`, ${pe.lLotSize}, ${pe.dTickSize})"><i class="bi bi-plus-circle"></i></button>
+                                <button class="btn btn-outline-warning oc-btn-basket oc-select-btn p-0 ${isPESelected ? 'active' : ''}" title="Toggle Selection" onclick="toggleOCItemSelection(this, '${pe.pSymbol}', '${pe.pExchSeg}', '${pe.pTrdSymbol}', ${pe.lLotSize})"><i class="bi bi-cart-plus"></i></button>
+                                <button class="btn btn-outline-light oc-btn-trade oc-select-btn p-0" title="Trade" onclick="openTradeFromOC('${pe.pSymbol}', '${pe.pExchSeg}', '${pe.pTrdSymbol}', \`${pe.pSymbolName}\`, ${pe.lLotSize}, ${pe.dTickSize})"><i class="bi bi-plus"></i></button>
                             </div>` : ''}
                         </td>
                         <td class="oc-ltp-cell ${pe ? 'text-danger' : 'text-muted'}" id="oc-ltp-${pe ? pe.pSymbol : 'none'}">${pe ? 'Loading...' : '-'}</td>
@@ -2451,32 +2479,74 @@
                 handlePlaceOrderTrigger();
             };
 
-            window.addToBasketFromOC = function(token, exch, symbol, lot) {
-                fetch('/basket/add/', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        instrument_token: token,
-                        exchange_segment: exch,
-                        trading_symbol: symbol,
-                        quantity: lot,
-                        price: 0,
-                        transaction_type: 'B',
-                        product_type: 'NRML',
-                        order_type: 'MKT'
-                    })
-                })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        showNotification(`Added ${symbol} to basket.`, 'success');
-                    } else {
-                        showNotification('Error: ' + data.error, 'danger');
-                    }
+            window.toggleOCItemSelection = function(btn, token, exch, symbol, lot) {
+                if (ocSelectedInstruments.has(token)) {
+                    ocSelectedInstruments.delete(token);
+                    btn.classList.remove('active');
+                } else {
+                    ocSelectedInstruments.set(token, { exch, symbol, lot });
+                    btn.classList.add('active');
+                }
+                updateOCBulkButton();
+            };
+
+            function updateOCBulkButton() {
+                const btn = document.getElementById('oc-bulk-basket-btn');
+                const countSpan = document.getElementById('oc-selected-count');
+                const count = ocSelectedInstruments.size;
+                
+                if (count > 0) {
+                    btn.style.display = 'block';
+                    countSpan.textContent = count;
+                } else {
+                    btn.style.display = 'none';
+                }
+            }
+
+            window.addOCSelectionToBasket = function() {
+                const count = ocSelectedInstruments.size;
+                if (count === 0) return;
+                
+                const promises = [];
+                for (let [token, data] of ocSelectedInstruments) {
+                    promises.push(
+                        fetch('/basket/add/', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                            },
+                            body: JSON.stringify({
+                                instrument_token: token,
+                                exchange_segment: data.exch,
+                                trading_symbol: data.symbol,
+                                quantity: data.lot,
+                                price: 0,
+                                transaction_type: 'B',
+                                product_type: 'NRML',
+                                order_type: 'MKT'
+                            })
+                        }).then(res => res.json())
+                    );
+                }
+                
+                Promise.all(promises).then(results => {
+                    const successCount = results.filter(r => r.status === 'success').length;
+                    showNotification(`Successfully added ${successCount} instruments to basket.`, 'success');
+                    ocSelectedInstruments.clear();
+                    updateOCBulkButton();
+                    // Refresh current view to clear active states
+                    renderChain(currentOCExpiry);
+                }).catch(err => {
+                    console.error('Bulk adding error:', err);
+                    showNotification('An error occurred during bulk adding.', 'danger');
                 });
+            };
+
+            window.openBasketFromOC = function() {
+                const basketModal = new bootstrap.Modal(document.getElementById('basketModal'));
+                basketModal.show();
+                if (typeof fetchBasketItems === 'function') fetchBasketItems();
             };
 
             function subscribeOCTokens() {
