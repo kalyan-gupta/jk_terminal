@@ -299,40 +299,75 @@
         .modern-results-table tbody tr:last-child td {
             border-bottom: none;
         }
-        /* Option Chain Table Styles */
-        .oc-table th { font-size: 0.8rem; letter-spacing: 0.05rem; }
-        .oc-strike-cell { background: #f8f9fa; font-weight: 700; color: #1a73e8; }
-        .oc-ltp-cell { font-family: 'Roboto Mono', monospace; font-weight: 600; width: 100px; }
-        .oc-action-btn { 
-            padding: 0.25rem 0.5rem; 
-            font-size: 0.85rem; 
-            transition: all 0.2s;
-            border: 1px solid transparent;
+        /* Option Chain Modern Dial */
+        .oc-expiry-container {
+            position: relative;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+            padding: 1rem 0;
+            overflow: hidden;
         }
-        .oc-action-btn:hover { background: #e8f0fe; border-color: #1a73e8; color: #1a73e8; }
-        .oc-expiry-pill {
+        .oc-expiry-container::before, .oc-expiry-container::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 80px;
+            z-index: 2;
+            pointer-events: none;
+        }
+        .oc-expiry-container::before { left: 0; background: linear-gradient(to right, #f8f9fa, transparent); }
+        .oc-expiry-container::after { right: 0; background: linear-gradient(to left, #f8f9fa, transparent); }
+
+        .oc-expiry-dial {
+            display: flex;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            padding: 10px 0;
+            gap: 15px;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+            padding-left: calc(50% - 45px); /* Center the first item */
+            padding-right: calc(50% - 45px); /* Center the last item */
+        }
+        .oc-expiry-dial::-webkit-scrollbar { display: none; }
+
+        .oc-expiry-item {
+            scroll-snap-align: center;
+            flex: 0 0 auto;
+            width: 90px;
+            height: 90px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 18px;
+            background: white;
+            border: 1px solid #e0e0e0;
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
             cursor: pointer;
-            padding: 0.5rem 1rem;
-            border-radius: 2rem;
-            border: 1px solid #dee2e6;
-            margin: 0 0.25rem;
-            white-space: nowrap;
-            transition: all 0.3s;
-            font-weight: 500;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
         }
-        .oc-expiry-pill.active {
+        .oc-expiry-item .day { font-size: 1.4rem; font-weight: 800; line-height: 1; }
+        .oc-expiry-item .month { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #666; margin-top: 2px; }
+        .oc-expiry-item .year { font-size: 0.6rem; font-weight: 600; color: #999; }
+
+        .oc-expiry-item.active {
             background: #1a73e8;
-            color: white;
             border-color: #1a73e8;
-            box-shadow: 0 4px 10px rgba(26, 115, 232, 0.3);
+            color: white;
+            transform: scale(1.15) translateY(-5px);
+            box-shadow: 0 10px 25px rgba(26, 115, 232, 0.3);
+            z-index: 3;
         }
-        .oc-expiry-pill:hover:not(.active) { background: #f1f3f4; }
-        .oc-row:hover { background-color: rgba(26, 115, 232, 0.02); }
-        .oc-action-icons { display: flex; gap: 0.5rem; justify-content: center; }
-        .oc-btn-basket { color: #fd7e14; }
-        .oc-btn-basket:hover { background: #fff4e6; color: #d9480f; }
-        .oc-btn-trade { color: #1a73e8; }
-        .oc-btn-trade:hover { background: #e8f0fe; color: #1557b0; }
+        .oc-expiry-item.active .month, .oc-expiry-item.active .year { color: rgba(255,255,255,0.8); }
+
+        .oc-expiry-item:not(.active) {
+            transform: scale(0.85);
+            opacity: 0.5;
+            filter: blur(0.5px);
+        }
+        .oc-expiry-item:hover:not(.active) { opacity: 0.8; transform: scale(0.9); }
     </style>
 </head>
 <body>
@@ -665,10 +700,10 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-0">
-                    <!-- Expiry selector -->
-                    <div class="bg-light border-bottom py-3 px-4">
-                        <div id="oc-expiry-list" class="d-flex overflow-x-auto pb-1" style="scrollbar-width: thin;">
-                            <!-- Expiry pills populated by JS -->
+                    <!-- Modern Expiry Dial -->
+                    <div class="oc-expiry-container">
+                        <div id="oc-expiry-dial" class="oc-expiry-dial">
+                            <!-- Expiry items populated by JS -->
                         </div>
                     </div>
                     
@@ -2175,6 +2210,7 @@
             const ocModalEl = document.getElementById('optionChainModal');
             let ocData = null;
             let currentOCExpiry = null;
+            let currentOCTokensWithExch = []; // Track tokens + exch for proper unsubscription
 
             document.getElementById('modal-option-chain-btn').addEventListener('click', function() {
                 const symbol = document.getElementById('modal-data').dataset.pSymbol;
@@ -2191,7 +2227,7 @@
                 ocModal.show();
                 
                 // Fetch chain data
-                document.getElementById('oc-expiry-list').innerHTML = '<div class="spinner-border spinner-border-sm text-primary mx-auto my-2"></div>';
+                document.getElementById('oc-expiry-dial').innerHTML = '<div class="spinner-border spinner-border-sm text-primary mx-auto my-4"></div>';
                 document.getElementById('oc-body').innerHTML = '<tr><td colspan="5" class="p-5 text-muted">Fetching option chain...</td></tr>';
                 
                 fetch(`/get_option_chain_ajax/?p_symbol=${encodeURIComponent(symbol)}`)
@@ -2199,7 +2235,7 @@
                     .then(data => {
                         if (data.status === 'success') {
                             ocData = data;
-                            renderExpirySelector();
+                            renderExpiryDial();
                             if (data.expiries && data.expiries.length > 0) {
                                 renderChain(data.expiries[0]);
                             }
@@ -2213,29 +2249,48 @@
                     });
             });
 
-            function renderExpirySelector() {
-                const list = document.getElementById('oc-expiry-list');
-                list.innerHTML = '';
+            function renderExpiryDial() {
+                const dial = document.getElementById('oc-expiry-dial');
+                dial.innerHTML = '';
+                
+                const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                
                 ocData.expiries.forEach((exp, idx) => {
-                    const pill = document.createElement('div');
-                    pill.className = `oc-expiry-pill ${idx === 0 ? 'active' : ''}`;
-                    pill.textContent = exp;
-                    pill.onclick = () => {
-                        document.querySelectorAll('.oc-expiry-pill').forEach(p => p.classList.remove('active'));
-                        pill.classList.add('active');
+                    const parts = exp.split('-');
+                    const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+                    const day = dateObj.getDate();
+                    const month = monthNames[dateObj.getMonth()];
+                    const year = dateObj.getFullYear();
+
+                    const item = document.createElement('div');
+                    item.className = `oc-expiry-item ${idx === 0 ? 'active' : ''}`;
+                    item.innerHTML = `
+                        <div class="month">${month}</div>
+                        <div class="day">${day}</div>
+                        <div class="year">${year}</div>
+                    `;
+                    
+                    item.onclick = () => {
+                        if (item.classList.contains('active')) return;
+                        document.querySelectorAll('.oc-expiry-item').forEach(p => p.classList.remove('active'));
+                        item.classList.add('active');
+                        item.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
                         renderChain(exp);
                     };
-                    list.appendChild(pill);
+                    dial.appendChild(item);
                 });
             }
 
             function renderChain(expiry) {
+                // Efficiency: Unsubscribe from old tokens before switching
+                unsubscribeOCTokens();
+                
                 currentOCExpiry = expiry;
                 const body = document.getElementById('oc-body');
                 body.innerHTML = '';
                 
-                unsubscribeOCTokens(); // Clear old subs
                 currentOCTokens.clear();
+                currentOCTokensWithExch = [];
                 
                 const rows = ocData.chain[expiry];
                 rows.forEach(row => {
@@ -2245,8 +2300,14 @@
                     const ce = row.CE;
                     const pe = row.PE;
                     
-                    if (ce) currentOCTokens.add(ce.pSymbol);
-                    if (pe) currentOCTokens.add(pe.pSymbol);
+                    if (ce) {
+                        currentOCTokens.add(ce.pSymbol);
+                        currentOCTokensWithExch.push({ instrument_token: ce.pSymbol, exchange_segment: ce.pExchSeg });
+                    }
+                    if (pe) {
+                        currentOCTokens.add(pe.pSymbol);
+                        currentOCTokensWithExch.push({ instrument_token: pe.pSymbol, exchange_segment: pe.pExchSeg });
+                    }
 
                     tr.innerHTML = `
                         <td class="oc-ltp-cell ${ce ? 'text-success' : 'text-muted'}" id="oc-ltp-${ce ? ce.pSymbol : 'none'}">${ce ? 'Loading...' : '-'}</td>
@@ -2316,38 +2377,19 @@
             };
 
             function subscribeOCTokens() {
-                if (currentOCTokens.size > 0 && tradeSocket.readyState === WebSocket.OPEN) {
-                    const tokens = Array.from(currentOCTokens).map(tk => {
-                        // Find exch from ocData
-                        let exch = 'nse_fo';
-                        for (let row of ocData.chain[currentOCExpiry]) {
-                            if (row.CE && row.CE.pSymbol === tk) { exch = row.CE.pExchSeg; break; }
-                            if (row.PE && row.PE.pSymbol === tk) { exch = row.PE.pExchSeg; break; }
-                        }
-                        return { instrument_token: tk, exchange_segment: exch };
-                    });
-                    
+                if (currentOCTokensWithExch.length > 0 && tradeSocket.readyState === WebSocket.OPEN) {
                     tradeSocket.send(JSON.stringify({
                         'action': 'subscribe',
-                        'params': { 'instrument_tokens': tokens, 'isDepth': false }
+                        'params': { 'instrument_tokens': currentOCTokensWithExch, 'isDepth': false }
                     }));
                 }
             }
 
             function unsubscribeOCTokens() {
-                if (currentOCTokens.size > 0 && tradeSocket.readyState === WebSocket.OPEN) {
-                    const tokens = Array.from(currentOCTokens).map(tk => {
-                        let exch = 'nse_fo';
-                        for (let row of ocData.chain[currentOCExpiry]) {
-                            if (row.CE && row.CE.pSymbol === tk) { exch = row.CE.pExchSeg; break; }
-                            if (row.PE && row.PE.pSymbol === tk) { exch = row.PE.pExchSeg; break; }
-                        }
-                        return { instrument_token: tk, exchange_segment: exch };
-                    });
-                    
+                if (currentOCTokensWithExch.length > 0 && tradeSocket.readyState === WebSocket.OPEN) {
                     tradeSocket.send(JSON.stringify({
                         'action': 'unsubscribe',
-                        'params': { 'instrument_tokens': tokens, 'isDepth': false }
+                        'params': { 'instrument_tokens': currentOCTokensWithExch, 'isDepth': false }
                     }));
                 }
             }
@@ -2355,6 +2397,7 @@
             ocModalEl.addEventListener('hidden.bs.modal', function() {
                 unsubscribeOCTokens();
                 currentOCTokens.clear();
+                currentOCTokensWithExch = [];
             });
 
             // Trigger inline re-authentication modal
