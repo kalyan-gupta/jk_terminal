@@ -846,6 +846,34 @@ def search_scrip_cache(request):
                 # For stocks or non-F&O search, use stock search (looser)
                 final_search = f"({stock_search})"
 
+            first_term = safe_terms[0] if safe_terms else ''
+            
+            # Check if user likely wants F&O based on month abbreviations in search
+            months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+            has_date_term = any(m in term for term in search_terms for m in months)
+            wants_fo = inst_type in ('option', 'future') or exchange in ('nse_fo', 'bse_fo') or has_date_term
+            
+            stock_priority_clause = "expire_date IS NOT NULL ASC," if not wants_fo else ""
+            
+            order_by_clause = f"""
+                ORDER BY 
+                    -- 1. Exact prefix match gets top priority
+                    CASE 
+                        WHEN LOWER(COALESCE(pSymbolName, '')) LIKE '{first_term}%' THEN 0 
+                        WHEN LOWER(COALESCE(pScripRefKey, '')) LIKE '{first_term}%' THEN 1
+                        ELSE 2 
+                    END ASC,
+                    -- 2. Equity prioritization if no FO intent
+                    {stock_priority_clause}
+                    -- 3. Sort by Nearest Expiry Date (Options/Futures)
+                    expire_date ASC NULLS LAST,
+                    -- 4. Strike price sorting (closest to 0 or sequential)
+                    dStrikePrice ASC,
+                    -- 5. Finally alphabetical
+                    pSymbolName ASC,
+                    pScripRefKey ASC
+            """
+
             query = f"""
                 SELECT 
                     pSymbol,
@@ -862,6 +890,7 @@ def search_scrip_cache(request):
                     CAST(COALESCE(lLotSize, 0) AS INTEGER) as lLotSize
                 FROM active_market_data
                 WHERE {where_clause} AND {final_search}
+                {order_by_clause}
                 LIMIT 50
             """
 
