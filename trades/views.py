@@ -749,20 +749,24 @@ def refresh_scrip_cache(request):
             }, status=404)
 
         with _duckdb_lock:
-            _duckdb_connection.execute('DROP TABLE IF EXISTS all_market_data')
+            _duckdb_connection.execute('DROP VIEW IF EXISTS active_market_data')
+            _duckdb_connection.execute('DROP TABLE IF EXISTS active_market_data')
+            _duckdb_connection.execute('DROP TABLE IF EXISTS temp_market_data')
             file_list_sql = ', '.join(_quote_sql_string(path) for path in csv_files)
             _duckdb_connection.execute(
-                f"CREATE TABLE all_market_data AS SELECT * FROM read_csv([{file_list_sql}], union_by_name=True)"
+                f"CREATE TABLE temp_market_data AS SELECT * FROM read_csv([{file_list_sql}], union_by_name=True)"
             )
             
             _duckdb_connection.execute(r"""
-                CREATE OR REPLACE VIEW active_market_data AS 
+                CREATE TABLE active_market_data AS 
                 SELECT *,
                        try_strptime(regexp_extract(COALESCE(pScripRefKey, ''), '(\d{2}[A-Z]{3}\d{2})', 1), '%d%b%y') as expire_date
-                FROM all_market_data
+                FROM temp_market_data
                 WHERE try_strptime(regexp_extract(COALESCE(pScripRefKey, ''), '(\d{2}[A-Z]{3}\d{2})', 1), '%d%b%y') IS NULL 
                    OR try_strptime(regexp_extract(COALESCE(pScripRefKey, ''), '(\d{2}[A-Z]{3}\d{2})', 1), '%d%b%y') >= current_date()
             """)
+            
+            _duckdb_connection.execute('DROP TABLE temp_market_data')
             
             row_count = _duckdb_connection.execute('SELECT COUNT(*) FROM active_market_data').fetchone()[0]
 
