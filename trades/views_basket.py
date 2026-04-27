@@ -70,28 +70,24 @@ def add_to_basket_ajax(request):
 
 @ajax_login_required
 def get_basket_ajax(request):
-    import duckdb
-    import os
-    from django.conf import settings
-    
     orders = BasketOrder.objects.filter(user=request.user).order_by('sort_order', 'created_at')
     basket_data = []
     
     if orders.exists():
-        # Get metadata for all tokens in basket from DuckDB
+        # Get metadata for all tokens in basket from DuckDB shared memory connection
+        from .views import _duckdb_connection, _duckdb_lock
         tokens = [o.instrument_token for o in orders]
         token_str = ", ".join([f"'{t}'" for t in tokens])
         
         try:
-            db_path = os.path.join(settings.BASE_DIR, 'scrip_cache.duckdb')
-            conn = duckdb.connect(db_path)
-            # Fetch lot_size, tick_size, pDesc etc.
-            metadata = conn.execute(f"""
-                SELECT pSymbol, pSymbolName, pDesc, dTickSize, lLotSize 
-                FROM active_market_data 
-                WHERE pSymbol IN ({token_str})
-            """).df().set_index('pSymbol').to_dict('index')
-            conn.close()
+            with _duckdb_lock:
+                # Fetch lot_size, tick_size, pDesc etc.
+                metadata = _duckdb_connection.execute(f"""
+                    SELECT CAST(pSymbol AS VARCHAR) as pSymbol, pSymbolName, pTrdSymbol, pInstType, pDesc, dTickSize, lLotSize, pScripRefKey, pOptionType,
+                    CAST(COALESCE("dStrikePrice;", 0) AS DECIMAL) / 100 as dStrikePrice
+                    FROM active_market_data 
+                    WHERE CAST(pSymbol AS VARCHAR) IN ({token_str})
+                """).df().set_index('pSymbol').to_dict('index')
         except Exception as e:
             logger.error(f"DuckDB error in get_basket: {e}")
             metadata = {}
@@ -112,10 +108,18 @@ def get_basket_ajax(request):
             }
             # Add metadata if found
             meta = metadata.get(o.instrument_token, {})
-            item['display_name'] = meta.get('pSymbolName', o.trading_symbol)
+            p_inst_type = meta.get('pInstType', '')
+            
+            # Use pScripRefKey as the primary display name as requested (more complete)
+            item['display_name'] = meta.get('pScripRefKey') or meta.get('pSymbolName') or o.trading_symbol
+            
+            item['pInstType'] = p_inst_type
             item['desc'] = meta.get('pDesc', '')
             item['tick_size'] = float(meta.get('dTickSize', 0.05))
             item['lot_size'] = int(meta.get('lLotSize', 1))
+            item['pScripRefKey'] = meta.get('pScripRefKey', '')
+            item['pOptionType'] = meta.get('pOptionType', '')
+            item['strike_price'] = float(meta.get('dStrikePrice') or 0)
             basket_data.append(item)
             
     return JsonResponse({'status': 'success', 'basket': basket_data})

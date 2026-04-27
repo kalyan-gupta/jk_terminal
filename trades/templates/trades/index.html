@@ -491,6 +491,12 @@
         .basket-exch-label { font-size: 0.65rem; font-weight: 800; padding: 1px 4px; border-radius: 3px; }
         .basket-exch-nse { background: #e7f1ff; color: #0d6efd; }
         .basket-exch-bse { background: #fef1e7; color: #fd7e14; }
+        
+        .basket-type-badge { font-size: 0.6rem; font-weight: 700; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; }
+        .basket-type-option { background: #fff9db; color: #f08c00; border: 1px solid #ffe066; }
+        .basket-type-future { background: #e3fafc; color: #0b7285; border: 1px solid #99e9f2; }
+        .basket-type-stock { background: #ebfbee; color: #2b8a3e; border: 1px solid #b2f2bb; }
+        .basket-type-index { background: #f8f9fa; color: #495057; border: 1px solid #dee2e6; }
 
         @keyframes spin {
             from { transform: rotate(0deg); }
@@ -3681,36 +3687,76 @@
                             }
                             
                             const newTokens = [];
-                            basketItems.forEach(item => {
-                                currentBasketTokens.add(item.instrument_token);
-                                newTokens.push({ instrument_token: item.instrument_token, exchange_segment: item.exchange_segment });
-                                
-                                const li = document.createElement('li');
-                                li.className = `list-group-item basket-item-row p-0 border-bottom ${item.transaction_type === 'B' ? 'buy' : 'sell'}`;
-                                li.dataset.id = item.id;
-                                
-                                const isNSE = item.exchange_segment.includes('nse');
-                                const exchClass = isNSE ? 'basket-exch-nse' : 'basket-exch-bse';
-                                const exchLabel = isNSE ? 'NSE' : 'BSE';
-                                
-                                li.innerHTML = `
-                                    <div class="p-3">
-                                        <div class="d-flex align-items-center">
-                                            <div class="me-3 cursor-move text-muted">
-                                                <i class="bi bi-grip-vertical fs-4"></i>
-                                            </div>
-                                            <div class="flex-grow-1">
-                                                <div class="d-flex justify-content-between align-items-start mb-1">
-                                                    <div>
-                                                        <span class="basket-exch-label ${exchClass} me-1">${exchLabel}</span>
-                                                        <span class="fw-bold text-dark">${item.display_name}</span>
-                                                        <div class="basket-ltp-badge badge bg-light text-primary border ms-2" id="basket-ltp-${item.instrument_token}">LTP: ...</div>
-                                                    </div>
-                                                    <div class="d-flex align-items-center gap-2">
-                                                        <span class="badge basket-side-badge ${item.transaction_type === 'B' ? 'bg-success text-white' : 'bg-danger text-white'}">${item.transaction_type === 'B' ? 'BUY' : 'SELL'}</span>
-                                                        <button class="btn btn-sm btn-link text-danger p-0 ms-2 remove-item-btn" data-id="${item.id}" title="Remove"><i class="bi bi-trash"></i></button>
-                                                    </div>
+                                 basketItems.forEach(item => {
+                                    currentBasketTokens.add(item.instrument_token);
+                                    newTokens.push({ instrument_token: item.instrument_token, exchange_segment: item.exchange_segment });
+                                    
+                                    // Determine type badge logic (similar to search)
+                                    let typeLabel = 'Stock';
+                                    let typeClass = 'basket-type-stock';
+                                    
+                                    if (item.pInstType) {
+                                        const it = item.pInstType.toUpperCase();
+                                        if (['OPTSTK', 'OPTIDX', 'SO', 'IO'].includes(it)) {
+                                            typeLabel = 'Option';
+                                            typeClass = 'basket-type-option';
+                                        } else if (['FUTIDX', 'FUTSTK', 'SF', 'IF'].includes(it)) {
+                                            typeLabel = 'Future';
+                                            typeClass = 'basket-type-future';
+                                        }
+                                    }
+                                    
+                                    if (item.exchange_segment.includes('_cm')) {
+                                        // Simple check for index if needed, but here we usually have pInstType empty for stocks
+                                        // If pInstType is empty and it's CM, it's a stock.
+                                    }
+
+                                    const li = document.createElement('li');
+                                    li.className = `list-group-item basket-item-row p-0 border-bottom ${item.transaction_type === 'B' ? 'buy' : 'sell'}`;
+                                    li.dataset.id = item.id;
+                                    
+                                    const isNSE = item.exchange_segment.includes('nse');
+                                    const exchClass = isNSE ? 'basket-exch-nse' : 'basket-exch-bse';
+                                    const exchLabel = isNSE ? 'NSE' : 'BSE';
+                                    
+                                    li.innerHTML = `
+                                        <div class="p-3">
+                                            <div class="d-flex align-items-center">
+                                                <div class="me-3 cursor-move text-muted">
+                                                    <i class="bi bi-grip-vertical fs-4"></i>
                                                 </div>
+                                                <div class="flex-grow-1">
+                                                    <div class="d-flex justify-content-between align-items-start mb-1">
+                                                        <div>
+                                                            <div class="d-flex align-items-center gap-1 mb-1">
+                                                                <span class="basket-exch-label ${exchClass}">${exchLabel}</span>
+                                                                <span class="basket-type-badge ${typeClass}">${typeLabel}</span>
+                                                                ${(item.pOptionType && item.pOptionType !== 'XX') ? `<span class="badge bg-secondary-subtle text-secondary-emphasis" style="font-size: 0.6rem; padding: 1px 4px;">${item.pOptionType}</span>` : ''}
+                                                            </div>
+                                                            <span class="fw-bold text-dark fs-6">${item.display_name}</span>
+                                                            <div class="basket-ltp-badge badge bg-light text-primary border ms-2" id="basket-ltp-${item.instrument_token}">LTP: ...</div>
+                                                            
+                                                            ${item.exchange_segment.toLowerCase().includes('_fo') ? `
+                                                                <div class="mt-1 d-flex gap-1">
+                                                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-normal" style="font-size: 0.65rem;">
+                                                                        <i class="bi bi-calendar-event me-1"></i>${(() => {
+                                                                            const match = (item.pScripRefKey || '').match(/(\d{2}[A-Z]{3}\d{2})/);
+                                                                            return match ? match[1] : '-';
+                                                                        })()}
+                                                                    </span>
+                                                                    ${item.strike_price > 0 ? `
+                                                                        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle fw-normal" style="font-size: 0.65rem;">
+                                                                            <i class="bi bi-bullseye me-1"></i>₹${item.strike_price}
+                                                                        </span>
+                                                                    ` : ''}
+                                                                </div>
+                                                            ` : ''}
+                                                        </div>
+                                                        <div class="d-flex align-items-center gap-2">
+                                                            <span class="badge basket-side-badge ${item.transaction_type === 'B' ? 'bg-success text-white' : 'bg-danger text-white'}">${item.transaction_type === 'B' ? 'BUY' : 'SELL'}</span>
+                                                            <button class="btn btn-sm btn-link text-danger p-0 ms-2 remove-item-btn" data-id="${item.id}" title="Remove"><i class="bi bi-trash"></i></button>
+                                                        </div>
+                                                    </div>
                                                 <div class="small text-muted d-flex gap-3 mt-1 basket-meta-labels">
                                                     <span><i class="bi bi-layers me-1"></i>${item.quantity} Qty</span>
                                                     <span><i class="bi bi-tag me-1"></i>${item.order_type === 'MKT' ? 'Market' : "₹" + item.price}</span>
