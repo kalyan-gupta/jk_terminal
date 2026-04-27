@@ -732,7 +732,7 @@
                     <form id="inline-reauth-form">
                         <div class="mb-3">
                             <label for="inline-totp" class="form-label text-muted small fw-bold">ONE-TIME TOTP CODE</label>
-                            <input type="text" class="form-control text-center fs-3 fw-bold" id="inline-totp" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" placeholder="000000" required>
+                            <input type="password" autocomplete="off" class="form-control text-center fs-3 fw-bold" id="inline-totp" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" placeholder="000000" required>
                             <div class="form-text text-center">6-digit code from your authenticator app.</div>
                         </div>
                         <div id="inline-reauth-error" class="alert alert-danger py-2 small" style="display: none;"></div>
@@ -1246,7 +1246,7 @@
                             {% csrf_token %}
                             <div class="mb-3">
                                 <label for="totp-code" class="form-label">TOTP Code</label>
-                                <input type="text" class="form-control text-center" id="totp-code" name="totp" maxlength="6" pattern="[0-9]{6}" required>
+                                <input type="password" autocomplete="off" class="form-control text-center" id="totp-code" name="totp" maxlength="6" pattern="[0-9]{6}" required>
                                 <div class="form-text">Enter the 6-digit code from your authenticator app.</div>
                             </div>
                         </form>
