@@ -1827,9 +1827,14 @@
                                     document.getElementById('modal-data').dataset.dTickSize = result.dTickSize || 0.05;
                                     document.getElementById('modal-data').dataset.pDesc = result.pDesc || '';
                                     document.getElementById('modal-data').dataset.displayName = displayName;
-                                    document.getElementById('modal-data').dataset.isIndex = ((result.pExchSeg === 'nse_cm' || result.pExchSeg === 'bse_cm') && (!result.pGroup || result.pGroup.trim() === '')) ? 'true' : 'false';
+                                    const isIdx = ((result.pExchSeg === 'nse_cm' || result.pExchSeg === 'bse_cm') && (!result.pGroup || result.pGroup.trim() === ''));
+                                    document.getElementById('modal-data').dataset.isIndex = isIdx ? 'true' : 'false';
                                     document.getElementById('modal-data').dataset.pAssetCode = result.pAssetCode || '';
                                     document.getElementById('modal-data').dataset.hasOptionChain = result.has_option_chain || false;
+                                    
+                                    // Toggle visibility of Place Order and Depth buttons for indices (indices are not tradable)
+                                    document.getElementById('modal-place-order-btn').style.display = isIdx ? 'none' : 'inline-block';
+                                    document.getElementById('modal-show-depth-btn').style.display = isIdx ? 'none' : 'inline-block';
                                     
                                     // Show/Hide Option Chain button
                                     const ocBtn = document.getElementById('modal-option-chain-btn');
