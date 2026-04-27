@@ -484,12 +484,22 @@
         }
         .side-toggle-btn.active-buy { background: #28a745; color: white; }
         .side-toggle-btn.active-sell { background: #dc3545; color: white; }
+        .side-toggle-btn.active-neutral { background: #6c757d; color: white; }
         
         .basket-ltp-badge { font-family: 'Roboto Mono', monospace; font-size: 0.75rem; padding: 2px 6px; }
 
         .basket-exch-label { font-size: 0.65rem; font-weight: 800; padding: 1px 4px; border-radius: 3px; }
         .basket-exch-nse { background: #e7f1ff; color: #0d6efd; }
         .basket-exch-bse { background: #fef1e7; color: #fd7e14; }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .spin-animation {
+            animation: spin 1s infinite linear;
+            display: inline-block;
+        }
 
     </style>
 </head>
@@ -562,9 +572,14 @@
                         <span class="text-muted small">
                             <i class="bi bi-info-circle me-1"></i> Drag and drop to reorder execution sequence.
                         </span>
-                        <button class="btn btn-sm btn-outline-danger" id="clear-basket-btn">
-                            <i class="bi bi-trash me-1"></i> Clear All
-                        </button>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-secondary" id="refresh-basket-btn">
+                                <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" id="clear-basket-btn">
+                                <i class="bi bi-trash me-1"></i> Clear All
+                            </button>
+                        </div>
                     </div>
                     
                     <div class="basket-list-container" style="max-height: 450px; overflow-y: auto;">
@@ -3625,6 +3640,16 @@
                 });
             };
 
+            const refreshBasketBtn = document.getElementById('refresh-basket-btn');
+            if (refreshBasketBtn) {
+                refreshBasketBtn.addEventListener('click', function() {
+                    const icon = this.querySelector('i');
+                    icon.classList.add('spin-animation');
+                    loadBasketItems();
+                    setTimeout(() => icon.classList.remove('spin-animation'), 1000);
+                });
+            }
+
             function loadBasketItems() {
                 const list = document.getElementById('basket-items-list');
                 if (!list) return;
@@ -3682,7 +3707,7 @@
                                                         <div class="basket-ltp-badge badge bg-light text-primary border ms-2" id="basket-ltp-${item.instrument_token}">LTP: ...</div>
                                                     </div>
                                                     <div class="d-flex align-items-center gap-2">
-                                                        <span class="badge ${item.transaction_type === 'B' ? 'bg-success text-white' : 'bg-danger text-white'}">${item.transaction_type === 'B' ? 'BUY' : 'SELL'}</span>
+                                                        <span class="badge basket-side-badge ${item.transaction_type === 'B' ? 'bg-success text-white' : 'bg-danger text-white'}">${item.transaction_type === 'B' ? 'BUY' : 'SELL'}</span>
                                                         <button class="btn btn-sm btn-link text-danger p-0 ms-2 remove-item-btn" data-id="${item.id}" title="Remove"><i class="bi bi-trash"></i></button>
                                                     </div>
                                                 </div>
@@ -3699,32 +3724,32 @@
                                         
                                         <!-- Inline Edit Panel -->
                                         <div class="basket-edit-panel">
-                                            <div class="row g-2 align-items-end">
+                                            <div class="row g-3 align-items-end">
                                                 <div class="col-4">
-                                                    <label class="form-label small fw-bold mb-1">Side</label>
+                                                    <label class="form-label x-small fw-bold mb-1 text-uppercase text-muted" style="font-size: 0.65rem;">Side</label>
                                                     <div class="side-toggle-group">
-                                                        <button class="side-toggle-btn ${item.transaction_type === 'B' ? 'active-buy' : ''}" onclick="updateBasketItemField(${item.id}, 'transaction_type', 'B')">BUY</button>
-                                                        <button class="side-toggle-btn ${item.transaction_type === 'S' ? 'active-sell' : ''}" onclick="updateBasketItemField(${item.id}, 'transaction_type', 'S')">SELL</button>
+                                                        <button class="side-toggle-btn btn-side-B ${item.transaction_type === 'B' ? 'active-buy' : ''}" onclick="updateBasketItemField(${item.id}, 'transaction_type', 'B')">BUY</button>
+                                                        <button class="side-toggle-btn btn-side-S ${item.transaction_type === 'S' ? 'active-sell' : ''}" onclick="updateBasketItemField(${item.id}, 'transaction_type', 'S')">SELL</button>
                                                     </div>
                                                 </div>
                                                 <div class="col-4">
-                                                    <label class="form-label small fw-bold mb-1">Product</label>
-                                                    <select class="form-select form-select-sm" onchange="updateBasketItemField(${item.id}, 'product_type', this.value)">
+                                                    <label class="form-label x-small fw-bold mb-1 text-uppercase text-muted" style="font-size: 0.65rem;">Product</label>
+                                                    <div class="side-toggle-group">
                                                         ${item.exchange_segment.includes('_cm') ? `
-                                                            <option value="CNC" ${item.product_type === 'CNC' ? 'selected' : ''}>CNC</option>
-                                                            <option value="MIS" ${item.product_type === 'MIS' ? 'selected' : ''}>MIS</option>
+                                                            <button class="side-toggle-btn btn-prod-CNC ${item.product_type === 'CNC' ? 'active-neutral' : ''}" onclick="updateBasketItemField(${item.id}, 'product_type', 'CNC')">CNC</button>
+                                                            <button class="side-toggle-btn btn-prod-MIS ${item.product_type === 'MIS' ? 'active-neutral' : ''}" onclick="updateBasketItemField(${item.id}, 'product_type', 'MIS')">MIS</button>
                                                         ` : `
-                                                            <option value="NRML" ${item.product_type === 'NRML' ? 'selected' : ''}>NRML</option>
-                                                            <option value="MIS" ${item.product_type === 'MIS' ? 'selected' : ''}>MIS</option>
+                                                            <button class="side-toggle-btn btn-prod-NRML ${item.product_type === 'NRML' ? 'active-neutral' : ''}" onclick="updateBasketItemField(${item.id}, 'product_type', 'NRML')">NRML</button>
+                                                            <button class="side-toggle-btn btn-prod-MIS ${item.product_type === 'MIS' ? 'active-neutral' : ''}" onclick="updateBasketItemField(${item.id}, 'product_type', 'MIS')">MIS</button>
                                                         `}
-                                                    </select>
+                                                    </div>
                                                 </div>
                                                 <div class="col-4 text-end">
-                                                    <label class="form-label small fw-bold mb-1">Type</label>
-                                                    <select class="form-select form-select-sm" onchange="updateBasketItemField(${item.id}, 'order_type', this.value)">
-                                                        <option value="L" ${item.order_type === 'L' ? 'selected' : ''}>LIMIT</option>
-                                                        <option value="MKT" ${item.order_type === 'MKT' ? 'selected' : ''}>MARKET</option>
-                                                    </select>
+                                                    <label class="form-label x-small fw-bold mb-1 text-uppercase text-muted" style="font-size: 0.65rem;">Type</label>
+                                                    <div class="side-toggle-group ms-auto">
+                                                        <button class="side-toggle-btn btn-type-L ${item.order_type === 'L' ? 'active-neutral' : ''}" onclick="updateBasketItemField(${item.id}, 'order_type', 'L')">LIMIT</button>
+                                                        <button class="side-toggle-btn btn-type-MKT ${item.order_type === 'MKT' ? 'active-neutral' : ''}" onclick="updateBasketItemField(${item.id}, 'order_type', 'MKT')">MKT</button>
+                                                    </div>
                                                 </div>
                                                 
                                                 <div class="col-6 mt-3">
@@ -3834,9 +3859,12 @@
                         // BUT we need to update the small labels in the li without closing the panel
                         const li = document.querySelector(`.basket-item-row[data-id="${id}"]`);
                         if (li) {
-                            const badge = li.querySelector('.badge');
-                            badge.className = `badge ${updatedData.transaction_type === 'B' ? 'bg-success text-white' : 'bg-danger text-white'}`;
-                            badge.textContent = updatedData.transaction_type === 'B' ? 'BUY' : 'SELL';
+                            // Update header side badge (specific class prevents LTP overwrite)
+                            const sideBadge = li.querySelector('.basket-side-badge');
+                            if (sideBadge) {
+                                sideBadge.className = `badge basket-side-badge ${updatedData.transaction_type === 'B' ? 'bg-success text-white' : 'bg-danger text-white'}`;
+                                sideBadge.textContent = updatedData.transaction_type === 'B' ? 'BUY' : 'SELL';
+                            }
                             li.className = `list-group-item basket-item-row p-0 border-bottom ${updatedData.transaction_type === 'B' ? 'buy' : 'sell'}`;
                             
                             const metaRow = li.querySelector('.basket-meta-labels');
@@ -3846,31 +3874,29 @@
                                 <span><i class="bi bi-box me-1"></i>${updatedData.product_type}</span>
                             `;
                             
-                            // Update side toggle buttons if it was a trantype change
-                            if (field === 'transaction_type') {
-                                const btns = li.querySelectorAll('.side-toggle-btn');
-                                btns.forEach(btn => {
-                                    if (btn.textContent.trim() === 'BUY') {
-                                        if (value === 'B') btn.classList.add('active-buy');
-                                        else btn.classList.remove('active-buy');
-                                    } else {
-                                        if (value === 'S') btn.classList.add('active-sell');
-                                        else btn.classList.remove('active-sell');
-                                    }
-                                });
-                            }
+                            // Update ALL toggle buttons in this row's panel
+                            li.querySelectorAll('.side-toggle-btn').forEach(btn => btn.classList.remove('active-buy', 'active-sell', 'active-neutral'));
                             
-                            // Disable/Enable price input if order_type changed
-                            if (field === 'order_type') {
-                                const priceInput = li.querySelector('.basket-price-input');
-                                const priceBtns = li.querySelectorAll('.basket-edit-panel .col-6:last-child button');
-                                if (value === 'MKT') {
-                                    priceInput.disabled = true;
-                                    priceBtns.forEach(b => b.disabled = true);
-                                } else {
-                                    priceInput.disabled = false;
-                                    priceBtns.forEach(b => b.disabled = false);
-                                }
+                            // 1. Transaction Type
+                            const buyBtn = li.querySelector('.btn-side-B');
+                            const sellBtn = li.querySelector('.btn-side-S');
+                            if (buyBtn && updatedData.transaction_type === 'B') buyBtn.classList.add('active-buy');
+                            if (sellBtn && updatedData.transaction_type === 'S') sellBtn.classList.add('active-sell');
+                            
+                            // 2. Product Type
+                            const prodBtn = li.querySelector(`.btn-prod-${updatedData.product_type}`);
+                            if (prodBtn) prodBtn.classList.add('active-neutral');
+                            
+                            // 3. Order Type
+                            const typeBtn = li.querySelector(`.btn-type-${updatedData.order_type}`);
+                            if (typeBtn) typeBtn.classList.add('active-neutral');
+
+                            // Disable/Enable price input if order_type is MKT 
+                            const priceInput = li.querySelector('.basket-price-input');
+                            const priceBtns = li.querySelectorAll('button[onclick*="price"]');
+                            if (priceInput) {
+                                priceInput.disabled = updatedData.order_type === 'MKT';
+                                priceBtns.forEach(b => b.disabled = updatedData.order_type === 'MKT');
                             }
                         }
                     }
