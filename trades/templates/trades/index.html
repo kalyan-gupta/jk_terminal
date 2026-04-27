@@ -2315,6 +2315,89 @@
             let currentOCUnderlyingIsIndex = false;
             let currentUnderlyingLtp = 0;
 
+            // IntersectionObserver state
+            let ocObserver = null;
+            let visibleOCTokens = new Set();
+            let activeOCSubscriptions = new Set();
+            let ocSubscriptionTimeout = null;
+
+            function processOCSubscriptions() {
+                if (tradeSocket.readyState !== WebSocket.OPEN) return;
+                
+                const tokensToUnsubscribe = [];
+                for (const tokenStr of activeOCSubscriptions) {
+                    if (!visibleOCTokens.has(tokenStr)) {
+                        tokensToUnsubscribe.push(tokenStr);
+                        activeOCSubscriptions.delete(tokenStr);
+                    }
+                }
+                
+                const tokensToSubscribe = [];
+                for (const tokenStr of visibleOCTokens) {
+                    if (!activeOCSubscriptions.has(tokenStr)) {
+                        tokensToSubscribe.push(tokenStr);
+                        activeOCSubscriptions.add(tokenStr);
+                    }
+                }
+                
+                if (tokensToUnsubscribe.length > 0) {
+                    const unsubData = currentOCTokensWithExch.filter(t => tokensToUnsubscribe.includes(t.instrument_token));
+                    if (unsubData.length > 0) {
+                        const payload = JSON.stringify({
+                            'action': 'unsubscribe',
+                            'params': { 'instrument_tokens': unsubData, 'isDepth': false }
+                        });
+                        tradeSocket.send(payload);
+                        for (let i = 1; i <= 5; i++) {
+                            setTimeout(() => { if (tradeSocket.readyState === WebSocket.OPEN) tradeSocket.send(payload); }, i * 200);
+                        }
+                    }
+                }
+                
+                if (tokensToSubscribe.length > 0) {
+                    const subData = currentOCTokensWithExch.filter(t => tokensToSubscribe.includes(t.instrument_token));
+                    if (subData.length > 0) {
+                        tradeSocket.send(JSON.stringify({
+                            'action': 'subscribe',
+                            'params': { 'instrument_tokens': subData, 'isDepth': false }
+                        }));
+                    }
+                }
+            }
+
+            function setupOCObserver() {
+                if (ocObserver) {
+                    ocObserver.disconnect();
+                }
+                visibleOCTokens.clear();
+                
+                const scrollRoot = document.querySelector('#optionChainModal .modal-body');
+                ocObserver = new IntersectionObserver((entries) => {
+                    let changed = false;
+                    entries.forEach(entry => {
+                        const ceToken = entry.target.dataset.ceToken;
+                        const peToken = entry.target.dataset.peToken;
+                        
+                        if (entry.isIntersecting) {
+                            if (ceToken) { visibleOCTokens.add(ceToken); changed = true; }
+                            if (peToken) { visibleOCTokens.add(peToken); changed = true; }
+                        } else {
+                            if (ceToken && visibleOCTokens.has(ceToken)) { visibleOCTokens.delete(ceToken); changed = true; }
+                            if (peToken && visibleOCTokens.has(peToken)) { visibleOCTokens.delete(peToken); changed = true; }
+                        }
+                    });
+                    
+                    if (changed) {
+                        clearTimeout(ocSubscriptionTimeout);
+                        ocSubscriptionTimeout = setTimeout(processOCSubscriptions, 200);
+                    }
+                }, {
+                    root: scrollRoot,
+                    rootMargin: '100px', // Trigger slightly before it enters the viewport
+                    threshold: 0
+                });
+            }
+
             document.getElementById('modal-option-chain-btn').addEventListener('click', function() {
                 const symbol = document.getElementById('modal-data').dataset.pSymbol;
                 const name = document.getElementById('modal-data').dataset.displayName;
@@ -2421,8 +2504,12 @@
             }
 
             function renderChain(expiry) {
-                // Efficiency: Unsubscribe from old tokens before switching
-                unsubscribeOCTokens();
+                // Efficiency: Clear visible tokens and force an unsubscribe of currently active ones before destroying the DOM
+                visibleOCTokens.clear();
+                processOCSubscriptions();
+                
+                // Setup fresh observer for the new DOM elements
+                setupOCObserver();
                 
                 currentOCExpiry = expiry;
                 const body = document.getElementById('oc-body');
@@ -2446,11 +2533,13 @@
                         const ceToken = String(ce.pSymbol);
                         currentOCTokens.add(ceToken);
                         currentOCTokensWithExch.push({ instrument_token: ceToken, exchange_segment: ce.pExchSeg });
+                        tr.dataset.ceToken = ceToken;
                     }
                     if (pe) {
                         const peToken = String(pe.pSymbol);
                         currentOCTokens.add(peToken);
                         currentOCTokensWithExch.push({ instrument_token: peToken, exchange_segment: pe.pExchSeg });
+                        tr.dataset.peToken = peToken;
                     }
 
                     tr.innerHTML = `
@@ -2473,10 +2562,10 @@
                         <td class="oc-ltp-cell ${pe ? 'text-danger' : 'text-muted'}" id="oc-ltp-${pe ? pe.pSymbol : 'none'}">${pe ? 'Loading...' : '-'}</td>
                     `;
                     body.appendChild(tr);
+                    ocObserver.observe(tr);
                 });
                 
                 updateATMHighlight();
-                subscribeOCTokens();
             }
 
             function updateATMHighlight() {
@@ -2594,32 +2683,7 @@
                 if (typeof fetchBasketItems === 'function') fetchBasketItems();
             };
 
-            function subscribeOCTokens() {
-                if (currentOCTokensWithExch.length > 0 && tradeSocket.readyState === WebSocket.OPEN) {
-                    tradeSocket.send(JSON.stringify({
-                        'action': 'subscribe',
-                        'params': { 'instrument_tokens': currentOCTokensWithExch, 'isDepth': false }
-                    }));
-                }
-            }
-
-            function unsubscribeOCTokens() {
-                if (currentOCTokensWithExch.length > 0 && tradeSocket.readyState === WebSocket.OPEN) {
-                    const payload = JSON.stringify({
-                        'action': 'unsubscribe',
-                        'params': { 'instrument_tokens': currentOCTokensWithExch, 'isDepth': false }
-                    });
-                    tradeSocket.send(payload);
-                    // Unsubscribe multiple times as requested to ensure Kotak Neo drops the feed
-                    for (let i = 1; i <= 5; i++) {
-                        setTimeout(() => {
-                            if (tradeSocket.readyState === WebSocket.OPEN) {
-                                tradeSocket.send(payload);
-                            }
-                        }, i * 200);
-                    }
-                }
-            }
+            // Removed old bulk subscribe functions, replaced with observer
 
             ocModalEl.addEventListener('hidden.bs.modal', function() {
                 // Clear underlying subscription
@@ -2642,7 +2706,14 @@
                     }
                 }
                 
-                unsubscribeOCTokens();
+                // Force unsubscribe all currently active option chain tokens
+                visibleOCTokens.clear();
+                processOCSubscriptions();
+                
+                if (ocObserver) {
+                    ocObserver.disconnect();
+                }
+                
                 currentOCTokens.clear();
                 currentOCTokensWithExch = [];
                 currentOCUnderlyingSymbol = null;
