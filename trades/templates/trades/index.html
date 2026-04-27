@@ -1116,13 +1116,15 @@
                                 <div class="row g-2 mt-2 border-top pt-3">
                                     <div class="col-md-6 border-end">
                                         <div class="small fw-bold text-success mb-1 text-center">Buy Depth</div>
-                                        <table class="table table-sm mb-0" style="font-size: 0.7rem;">
+                                        <table class="table table-sm mb-0 text-center" style="font-size: 0.7rem;">
+                                            <thead class="text-muted border-bottom"><tr><th>Price</th><th>Qty</th><th>Orders</th></tr></thead>
                                             <tbody id="order-buy-depth-body"></tbody>
                                         </table>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="small fw-bold text-danger mb-1 text-center">Sell Depth</div>
-                                        <table class="table table-sm mb-0" style="font-size: 0.7rem;">
+                                        <table class="table table-sm mb-0 text-center" style="font-size: 0.7rem;">
+                                            <thead class="text-muted border-bottom"><tr><th>Price</th><th>Qty</th><th>Orders</th></tr></thead>
                                             <tbody id="order-sell-depth-body"></tbody>
                                         </table>
                                     </div>
@@ -1457,6 +1459,14 @@
                             if (quote.depth && orderDepthSection && orderDepthSection.classList.contains('show')) {
                                 updateDepthUI(quote, 'order-buy-depth-body', 'order-sell-depth-body');
                             }
+                        }
+                        
+                        // 4. Update Option Chain local depth
+                        if (currentOCDepthSymbolCE === instrumentSymbol && quote.depth) {
+                            updateDepthUI(quote, `oc-ce-buy-${instrumentSymbol}`, `oc-ce-sell-${instrumentSymbol}`);
+                        }
+                        if (currentOCDepthSymbolPE === instrumentSymbol && quote.depth) {
+                            updateDepthUI(quote, `oc-pe-buy-${instrumentSymbol}`, `oc-pe-sell-${instrumentSymbol}`);
                         }
                     });
                 } else if (incoming_data.message === "Connected and authenticated") {
@@ -2333,6 +2343,14 @@
             let visibleOCTokens = new Set();
             let activeOCSubscriptions = new Set();
             let ocSubscriptionTimeout = null;
+            let initialOCScrollCompleted = false;
+            
+            // Option Chain Depth Tracker
+            let currentOCDepthSymbolCE = null;
+            let currentOCDepthExchCE = null;
+            let currentOCDepthSymbolPE = null;
+            let currentOCDepthExchPE = null;
+            let activeOCDepthRow = null;
 
             function processOCSubscriptions() {
                 if (tradeSocket.readyState !== WebSocket.OPEN) return;
@@ -2425,6 +2443,7 @@
                 currentOCUnderlyingExch = exch;
                 currentOCUnderlyingIsIndex = isIndex;
                 currentUnderlyingLtp = 0;
+                initialOCScrollCompleted = false;
                 
                 // Clear selections when opening a new underlying
                 ocSelectedInstruments.clear();
@@ -2448,7 +2467,6 @@
                             renderExpiryDial();
                             if (data.expiries && data.expiries.length > 0) {
                                 renderChain(data.expiries[0]);
-                                setTimeout(scrollToATM, 500);
                             }
                         } else {
                             showNotification('Error: ' + data.error, 'danger');
@@ -2468,7 +2486,6 @@
                             const badge = document.getElementById('oc-underlying-ltp');
                             if (badge) badge.textContent = `LTP: ₹${currentUnderlyingLtp.toFixed(2)}`;
                             updateATMHighlight();
-                            setTimeout(scrollToATM, 500); // Wait for table to render
                         }
                         
                         if (tradeSocket.readyState === WebSocket.OPEN) {
@@ -2525,6 +2542,8 @@
                 // Setup fresh observer for the new DOM elements
                 setupOCObserver();
                 
+                if (activeOCDepthRow) toggleOCDepth(null, null, null, null, null);
+                
                 currentOCExpiry = expiry;
                 const body = document.getElementById('oc-body');
                 body.innerHTML = '';
@@ -2565,7 +2584,12 @@
                                 <button class="btn btn-outline-warning oc-btn-basket oc-select-btn p-0 ${isCESelected ? 'active' : ''}" title="Toggle Selection" onclick="toggleOCItemSelection(this, '${ce.pSymbol}', '${ce.pExchSeg}', '${ce.pTrdSymbol}', ${ce.lLotSize})"><i class="bi bi-cart-plus"></i></button>
                             </div>` : ''}
                         </td>
-                        <td class="oc-strike-cell" data-strike="${row.strike}">₹${row.strike}</td>
+                        <td class="oc-strike-cell" style="cursor: pointer;" data-strike="${row.strike}" onclick="toggleOCDepth(this.parentElement, '${ce ? ce.pSymbol : ''}', '${ce ? ce.pExchSeg : ''}', '${pe ? pe.pSymbol : ''}', '${pe ? pe.pExchSeg : ''}')">
+                            <div class="d-flex align-items-center justify-content-center">
+                                <span>₹${row.strike}</span>
+                                <i class="bi bi-chevron-down ms-1 text-muted" style="font-size: 0.6rem;"></i>
+                            </div>
+                        </td>
                         <td class="align-middle">
                             ${pe ? `
                             <div class="oc-action-icons">
@@ -2603,6 +2627,9 @@
                 const atmCell = document.querySelector(`.oc-strike-cell[data-strike="${closestStrike}"]`);
                 if (atmCell) {
                     atmCell.parentElement.classList.add('oc-atm-row');
+                    if (!initialOCScrollCompleted) {
+                        setTimeout(scrollToATM, 100);
+                    }
                 }
             }
 
@@ -2610,8 +2637,105 @@
                 const atmRow = document.querySelector('.oc-atm-row');
                 if (atmRow) {
                     atmRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    initialOCScrollCompleted = true;
                 }
             }
+
+            window.toggleOCDepth = function(strikeRowEl, ceToken, ceExch, peToken, peExch) {
+                // If there's an already active depth row
+                if (activeOCDepthRow) {
+                    // Clean up socket
+                    const unsubPayload = {
+                        'action': 'unsubscribe',
+                        'params': { 'instrument_tokens': [], 'isDepth': true, 'isIndex': false }
+                    };
+                    if (currentOCDepthSymbolCE) unsubPayload.params.instrument_tokens.push({"instrument_token": currentOCDepthSymbolCE, "exchange_segment": currentOCDepthExchCE});
+                    if (currentOCDepthSymbolPE) unsubPayload.params.instrument_tokens.push({"instrument_token": currentOCDepthSymbolPE, "exchange_segment": currentOCDepthExchPE});
+                    
+                    if (unsubPayload.params.instrument_tokens.length > 0 && tradeSocket.readyState === WebSocket.OPEN) {
+                        tradeSocket.send(JSON.stringify(unsubPayload));
+                    }
+                    
+                    const isSameRow = activeOCDepthRow.previousElementSibling === strikeRowEl;
+                    activeOCDepthRow.remove();
+                    activeOCDepthRow = null;
+                    currentOCDepthSymbolCE = null;
+                    currentOCDepthSymbolPE = null;
+                    
+                    if (isSameRow || !strikeRowEl) return; // If same row clicked or forced close
+                }
+                
+                // Open new depth row
+                currentOCDepthSymbolCE = ceToken || null;
+                currentOCDepthExchCE = ceExch || null;
+                currentOCDepthSymbolPE = peToken || null;
+                currentOCDepthExchPE = peExch || null;
+                
+                const depthTr = document.createElement('tr');
+                depthTr.className = 'oc-depth-view-row bg-light shadow-sm';
+                
+                depthTr.innerHTML = `
+                    <td colspan="5" class="p-0 border-0">
+                        <div class="d-flex bg-white m-0 border-bottom border-light">
+                            <!-- Call Depth -->
+                            <div class="flex-fill border-end p-2 pb-0" style="width: 50%;">
+                                <div class="badge bg-success-subtle text-success-emphasis mb-2 w-100 text-center py-1">Call Depth</div>
+                                ${ceToken ? `
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <table class="table table-sm mb-0 text-center" style="font-size: 0.65rem;">
+                                            <thead class="text-muted border-bottom"><tr><th>Price</th><th>Qty</th><th>Orders</th></tr></thead>
+                                            <tbody id="oc-ce-buy-${ceToken}"></tbody>
+                                        </table>
+                                    </div>
+                                    <div class="col-6">
+                                        <table class="table table-sm mb-0 text-center" style="font-size: 0.65rem;">
+                                            <thead class="text-muted border-bottom"><tr><th>Price</th><th>Qty</th><th>Orders</th></tr></thead>
+                                            <tbody id="oc-ce-sell-${ceToken}"></tbody>
+                                        </table>
+                                    </div>
+                                </div>` : '<div class="text-muted text-center small mt-3 mb-3">N/A</div>'}
+                            </div>
+                            
+                            <!-- Put Depth -->
+                            <div class="flex-fill p-2 pb-0" style="width: 50%;">
+                                <div class="badge bg-danger-subtle text-danger-emphasis mb-2 w-100 text-center py-1">Put Depth</div>
+                                ${peToken ? `
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <table class="table table-sm mb-0 text-center" style="font-size: 0.65rem;">
+                                            <thead class="text-muted border-bottom"><tr><th>Price</th><th>Qty</th><th>Orders</th></tr></thead>
+                                            <tbody id="oc-pe-buy-${peToken}"></tbody>
+                                        </table>
+                                    </div>
+                                    <div class="col-6">
+                                        <table class="table table-sm mb-0 text-center" style="font-size: 0.65rem;">
+                                            <thead class="text-muted border-bottom"><tr><th>Price</th><th>Qty</th><th>Orders</th></tr></thead>
+                                            <tbody id="oc-pe-sell-${peToken}"></tbody>
+                                        </table>
+                                    </div>
+                                </div>` : '<div class="text-muted text-center small mt-3 mb-3">N/A</div>'}
+                            </div>
+                        </div>
+                    </td>
+                `;
+                
+                strikeRowEl.after(depthTr);
+                activeOCDepthRow = depthTr;
+                depthTr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                
+                // Subscribe to tokens
+                const subPayload = {
+                    'action': 'subscribe',
+                    'params': { 'instrument_tokens': [], 'isDepth': true, 'isIndex': false }
+                };
+                if (currentOCDepthSymbolCE) subPayload.params.instrument_tokens.push({"instrument_token": currentOCDepthSymbolCE, "exchange_segment": currentOCDepthExchCE});
+                if (currentOCDepthSymbolPE) subPayload.params.instrument_tokens.push({"instrument_token": currentOCDepthSymbolPE, "exchange_segment": currentOCDepthExchPE});
+                
+                if (subPayload.params.instrument_tokens.length > 0 && tradeSocket.readyState === WebSocket.OPEN) {
+                    tradeSocket.send(JSON.stringify(subPayload));
+                }
+            };
 
             window.openTradeFromOC = function(pSymbol, pExchSeg, pTrdSymbol, displayName, lLotSize, dTickSize) {
                 // Update modal-data with the option's data
@@ -2723,6 +2847,10 @@
                 // Force unsubscribe all currently active option chain tokens
                 visibleOCTokens.clear();
                 processOCSubscriptions();
+                
+                if (activeOCDepthRow) {
+                    toggleOCDepth(null, null, null, null, null); // Force close of expanded depth
+                }
                 
                 if (ocObserver) {
                     ocObserver.disconnect();
