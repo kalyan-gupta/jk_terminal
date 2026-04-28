@@ -45,6 +45,67 @@ def _get_scrip_data_files():
     return []
 
 
+def _perform_scrip_cache_refresh():
+    """Internal function to refresh scrip cache in DuckDB"""
+    try:
+        csv_files = _get_scrip_data_files()
+        if not csv_files:
+            logger.error("No scrip CSV files found for refresh.")
+            return False, "No scrip CSV files found."
+
+        with _duckdb_lock:
+            _duckdb_connection.execute('DROP VIEW IF EXISTS active_market_data')
+            _duckdb_connection.execute('DROP TABLE IF EXISTS active_market_data')
+            _duckdb_connection.execute('DROP TABLE IF EXISTS temp_market_data')
+            file_list_sql = ', '.join(_quote_sql_string(path) for path in csv_files)
+            _duckdb_connection.execute(
+                f"CREATE TABLE temp_market_data AS SELECT * FROM read_csv([{file_list_sql}], union_by_name=True)"
+            )
+            
+            _duckdb_connection.execute(r"""
+                CREATE TABLE active_market_data AS 
+                WITH option_underlyings AS (
+                    SELECT DISTINCT pAssetCode 
+                    FROM temp_market_data 
+                    WHERE pInstType IN ('OPTIDX', 'OPTSTK', 'IO', 'SO')
+                )
+                SELECT t.*,
+                       try_strptime(regexp_extract(COALESCE(t.pScripRefKey, ''), '(\d{2}[A-Z]{3}\d{2})', 1), '%d%b%y') as expire_date,
+                       (ou.pAssetCode IS NOT NULL) as has_option_chain
+                FROM temp_market_data t
+                LEFT JOIN option_underlyings ou ON CAST(t.pSymbol AS VARCHAR) = CAST(ou.pAssetCode AS VARCHAR)
+                WHERE try_strptime(regexp_extract(COALESCE(t.pScripRefKey, ''), '(\d{2}[A-Z]{3}\d{2})', 1), '%d%b%y') IS NULL 
+                   OR try_strptime(regexp_extract(COALESCE(t.pScripRefKey, ''), '(\d{2}[A-Z]{3}\d{2})', 1), '%d%b%y') >= current_date()
+            """)
+            
+            _duckdb_connection.execute('DROP TABLE temp_market_data')
+            row_count = _duckdb_connection.execute('SELECT COUNT(*) FROM active_market_data').fetchone()[0]
+            logger.info(f"Refreshed active_market_data with {row_count} active scrips.")
+            return True, f"Refreshed with {row_count} scrips from {len(csv_files)} files."
+    except Exception as e:
+        logger.error(f"Error performing scrip cache refresh: {e}")
+        return False, str(e)
+
+
+def ensure_scrip_cache():
+    """Ensure active_market_data is loaded in DuckDB"""
+    try:
+        with _duckdb_lock:
+            # Check if table exists
+            table_check = _duckdb_connection.execute("SELECT count(*) FROM information_schema.tables WHERE table_name = 'active_market_data'").fetchone()[0]
+            if table_check > 0:
+                count = _duckdb_connection.execute("SELECT count(*) FROM active_market_data").fetchone()[0]
+                if count > 0:
+                    return True
+        
+        # If not exists or empty, trigger refresh
+        success, _ = _perform_scrip_cache_refresh()
+        return success
+    except Exception as e:
+        logger.error(f"Error in ensure_scrip_cache: {e}")
+        return False
+
+
 # ==================== Authentication Views ====================
 
 def login_view(request):
@@ -752,51 +813,11 @@ def refresh_scrip_cache(request):
     if request.method != 'GET':
         return JsonResponse({'status': 'error', 'message': 'Only GET requests are allowed.'}, status=405)
 
-    try:
-        csv_files = _get_scrip_data_files()
-        if not csv_files:
-            return JsonResponse({
-                'status': 'error',
-                'message': 'Could not find matching scrip CSV files in trades/scrip_data. Expected files containing nse_fo, bse_fo, nse_cm, or bse_cm.'
-            }, status=404)
-
-        with _duckdb_lock:
-            _duckdb_connection.execute('DROP VIEW IF EXISTS active_market_data')
-            _duckdb_connection.execute('DROP TABLE IF EXISTS active_market_data')
-            _duckdb_connection.execute('DROP TABLE IF EXISTS temp_market_data')
-            file_list_sql = ', '.join(_quote_sql_string(path) for path in csv_files)
-            _duckdb_connection.execute(
-                f"CREATE TABLE temp_market_data AS SELECT * FROM read_csv([{file_list_sql}], union_by_name=True)"
-            )
-            
-            _duckdb_connection.execute(r"""
-                CREATE TABLE active_market_data AS 
-                WITH option_underlyings AS (
-                    SELECT DISTINCT pAssetCode 
-                    FROM temp_market_data 
-                    WHERE pInstType IN ('OPTIDX', 'OPTSTK', 'IO', 'SO')
-                )
-                SELECT t.*,
-                       try_strptime(regexp_extract(COALESCE(t.pScripRefKey, ''), '(\d{2}[A-Z]{3}\d{2})', 1), '%d%b%y') as expire_date,
-                       (ou.pAssetCode IS NOT NULL) as has_option_chain
-                FROM temp_market_data t
-                LEFT JOIN option_underlyings ou ON CAST(t.pSymbol AS VARCHAR) = CAST(ou.pAssetCode AS VARCHAR)
-                WHERE try_strptime(regexp_extract(COALESCE(t.pScripRefKey, ''), '(\d{2}[A-Z]{3}\d{2})', 1), '%d%b%y') IS NULL 
-                   OR try_strptime(regexp_extract(COALESCE(t.pScripRefKey, ''), '(\d{2}[A-Z]{3}\d{2})', 1), '%d%b%y') >= current_date()
-            """)
-            
-            _duckdb_connection.execute('DROP TABLE temp_market_data')
-            
-            row_count = _duckdb_connection.execute('SELECT COUNT(*) FROM active_market_data').fetchone()[0]
-
-        return JsonResponse({
-            'status': 'success',
-            'message': f'Refreshed active_market_data with {row_count} active scrips from {len(csv_files)} file(s).',
-            'loaded_files': [os.path.basename(path) for path in csv_files],
-            'row_count': row_count,
-        })
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    success, message = _perform_scrip_cache_refresh()
+    if success:
+        return JsonResponse({'status': 'success', 'message': message})
+    else:
+        return JsonResponse({'status': 'error', 'message': message}, status=500)
 
 
 @login_required_with_session_check
@@ -1300,6 +1321,9 @@ def index(request):
     """Main trading dashboard - requires authentication"""
     api_response = None
     logger.info(f"User '{request.user.username}' loading trading dashboard.")
+    
+    # Auto-refresh scrip cache if empty
+    ensure_scrip_cache()
     
     # Check if user has credentials setup
     try:
