@@ -81,10 +81,10 @@ def _perform_scrip_cache_refresh():
             _duckdb_connection.execute('DROP TABLE temp_market_data')
             row_count = _duckdb_connection.execute('SELECT COUNT(*) FROM active_market_data').fetchone()[0]
             logger.info(f"Refreshed active_market_data with {row_count} active scrips.")
-            return True, f"Refreshed with {row_count} scrips from {len(csv_files)} files."
+            return True, f"Refreshed with {row_count} scrips from {len(csv_files)} files.", row_count
     except Exception as e:
         logger.error(f"Error performing scrip cache refresh: {e}")
-        return False, str(e)
+        return False, str(e), 0
 
 
 def ensure_scrip_cache():
@@ -99,7 +99,7 @@ def ensure_scrip_cache():
                     return True
         
         # If not exists or empty, trigger refresh
-        success, _ = _perform_scrip_cache_refresh()
+        success, _, _ = _perform_scrip_cache_refresh()
         return success
     except Exception as e:
         logger.error(f"Error in ensure_scrip_cache: {e}")
@@ -813,9 +813,9 @@ def refresh_scrip_cache(request):
     if request.method != 'GET':
         return JsonResponse({'status': 'error', 'message': 'Only GET requests are allowed.'}, status=405)
 
-    success, message = _perform_scrip_cache_refresh()
+    success, message, row_count = _perform_scrip_cache_refresh()
     if success:
-        return JsonResponse({'status': 'success', 'message': message})
+        return JsonResponse({'status': 'success', 'message': message, 'row_count': row_count})
     else:
         return JsonResponse({'status': 'error', 'message': message}, status=500)
 

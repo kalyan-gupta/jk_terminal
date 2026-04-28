@@ -522,6 +522,11 @@
             display: inline-block;
         }
 
+        /* Layering Fixes */
+        #notification-area { z-index: 9999 !important; }
+        #basketModal { z-index: 1060 !important; }
+        .modal-backdrop { z-index: 1040 !important; }
+
     </style>
 </head>
 <body>
@@ -667,7 +672,7 @@
     </div>
 
     <main class="container py-4">
-        <div id="notification-area" class="position-fixed top-0 end-0 p-3" style="z-index: 1030"></div>
+        <div id="notification-area" class="position-fixed top-0 end-0 p-3" style="z-index: 9999"></div>
 
         {% if messages %}
             {% for message in messages %}
