@@ -85,7 +85,8 @@ def get_basket_ajax(request):
             with _duckdb_lock:
                 # Fetch lot_size, tick_size, pDesc etc.
                 metadata = _duckdb_connection.execute(f"""
-                    SELECT CAST(pSymbol AS VARCHAR) as pSymbol, pSymbolName, pTrdSymbol, pInstType, pDesc, dTickSize, lLotSize, pScripRefKey, pOptionType,
+                    SELECT CAST(pSymbol AS VARCHAR) as pSymbol, pSymbolName, pTrdSymbol, pInstType, pDesc, 
+                    CAST(COALESCE(dTickSize, 0) AS DECIMAL) / 100 as dTickSize, lLotSize, pScripRefKey, pOptionType,
                     CAST(COALESCE("dStrikePrice;", 0) AS DECIMAL) / 100 as dStrikePrice
                     FROM active_market_data 
                     WHERE CAST(pSymbol AS VARCHAR) IN ({token_str})
@@ -100,14 +101,22 @@ def get_basket_ajax(request):
             api = KotakNeoAPI(user=request.user, session_id=request.session.session_key)
             if api.get_cached_session():
                 instrument_tokens = [{"instrument_token": o.instrument_token, "exchange_segment": o.exchange_segment} for o in orders]
-                quotes = api.quotes(instrument_tokens=instrument_tokens)
+                quotes = api.quotes(instrument_tokens=instrument_tokens, quote_type="all")
+                if isinstance(quotes, dict) and 'data' in quotes:
+                    quotes = quotes['data']
+
                 if isinstance(quotes, list):
+                    if len(quotes) > 0:
+                        logger.debug(f"Basket quote sample: {quotes[0]}")
                     for q in quotes:
-                        tkn = str(q.get('instrumentToken'))
+                        # Try all common token keys in Kotak API responses
+                        tkn = str(q.get('instrumentToken') or q.get('instToken') or q.get('instrument_token') or q.get('pSymbol') or '')
+                        if not tkn:
+                            continue
                         quotes_data[tkn] = {
-                            'lower_circuit': q.get('low_price_range'),
-                            'upper_circuit': q.get('high_price_range'),
-                            'ltp': q.get('ltp')
+                            'lower_circuit': q.get('low_price_range') or q.get('lower_circuit') or q.get('lPriceRange'),
+                            'upper_circuit': q.get('high_price_range') or q.get('upper_circuit') or q.get('hPriceRange'),
+                            'ltp': q.get('ltp') or q.get('last_price') or q.get('lastPrice')
                         }
         except Exception as e:
             logger.warning(f"Failed to fetch quotes for basket: {e}")

@@ -1441,6 +1441,16 @@
 
             const tradeSocket = new WebSocket(`ws://${window.location.host}/ws/trades/`);
 
+            // Global Modal Backdrop Cleanup - ensures backdrops are removed when all modals are closed
+            document.addEventListener('hidden.bs.modal', function () {
+                if (document.querySelectorAll('.modal.show').length === 0) {
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                    document.body.classList.remove('modal-open');
+                    document.body.style.paddingRight = '';
+                    document.body.style.overflow = '';
+                }
+            });
+
             tradeSocket.onopen = function(e) {
                 console.log("WebSocket connection established");
                 // Initial subscriptions for active tabs
@@ -2295,6 +2305,12 @@
                 const lLotSize = parseInt(modalData.lLotSize) || 1;
                 if (!quantityInput) return false;
                 const quantity = parseInt(quantityInput.value);
+                
+                if (isNaN(quantity) || quantity < lLotSize) {
+                    quantityInput.setCustomValidity(`Quantity must be at least ${lLotSize}`);
+                    return false;
+                }
+                
                 if (quantity % lLotSize !== 0) {
                     quantityInput.setCustomValidity(`Quantity must be in multiples of ${lLotSize}`);
                     return false;
@@ -3942,11 +3958,26 @@
 
             function validateBasketItem(item) {
                 const errors = [];
+                const lotSize = parseInt(item.lot_size) || 1;
+                const tickSize = parseFloat(item.tick_size) || 0.05;
+
+                // Quantity validation
+                const qty = parseInt(item.quantity);
+                if (isNaN(qty) || qty < lotSize) {
+                    errors.push(`Min Qty: ${lotSize}`);
+                } else if (qty % lotSize !== 0) {
+                    errors.push(`Multiple of ${lotSize}`);
+                }
+
+                // Price validation
                 if (item.order_type === 'L') {
                     const price = parseFloat(item.price);
                     if (!price || price <= 0) {
                         errors.push('Price required');
                     } else {
+                        if (!isMultipleOfTickSize(price, tickSize)) {
+                            errors.push(`Tick size: ${tickSize}`);
+                        }
                         if (item.lower_circuit && price < parseFloat(item.lower_circuit)) {
                             errors.push(`Below L: ${item.lower_circuit}`);
                         }
@@ -4055,6 +4086,48 @@
                                     const itemErrors = validateBasketItem(item);
                                     if (itemErrors.length > 0) totalInvalid++;
 
+                                    // Fallback: If circuits are missing for Limit order, try individual fetch
+                                    if (item.order_type === 'L' && (!item.lower_circuit || !item.upper_circuit || item.lower_circuit === '-')) {
+                                        fetch(`/get_ltp/?p_symbol=${item.instrument_token}&p_exch_seg=${item.exchange_segment}`)
+                                            .then(r => r.json())
+                                            .then(q => {
+                                                if (q.lower_circuit || q.upper_circuit) {
+                                                    item.lower_circuit = q.lower_circuit;
+                                                    item.upper_circuit = q.upper_circuit;
+                                                    const li = document.querySelector(`.basket-item-row[data-id="${item.id}"]`);
+                                                    if (li) {
+                                                        const staticMeta = li.querySelector('.basket-static-meta');
+                                                        if (staticMeta) {
+                                                            staticMeta.innerHTML = `
+                                                                <span><span class="fw-bold">L:</span> ${item.lower_circuit || '-'}</span>
+                                                                <span><span class="fw-bold">U:</span> ${item.upper_circuit || '-'}</span>
+                                                                <span><span class="fw-bold">Tick:</span> ${item.tick_size}</span>
+                                                                <span><span class="fw-bold">Lot:</span> ${item.lot_size}</span>
+                                                            `;
+                                                        }
+                                                        // Re-validate
+                                                        const newErrs = validateBasketItem(item);
+                                                        const headerBadges = li.querySelector('.d-flex.align-items-center.gap-1.mb-1');
+                                                        if (headerBadges) {
+                                                            headerBadges.querySelectorAll('.basket-error-badge').forEach(b => b.remove());
+                                                            newErrs.forEach(err => {
+                                                                const span = document.createElement('span');
+                                                                span.className = 'basket-error-badge';
+                                                                span.innerHTML = `<i class="bi bi-exclamation-triangle"></i> ${err}`;
+                                                                headerBadges.appendChild(span);
+                                                            });
+                                                        }
+                                                        if (newErrs.length > 0) li.classList.add('invalid');
+                                                        else li.classList.remove('invalid');
+                                                        
+                                                        // Update execute button
+                                                        const anyInvalid = document.querySelectorAll('.basket-item-row.invalid').length > 0;
+                                                        if (executeBtn) executeBtn.disabled = anyInvalid;
+                                                    }
+                                                }
+                                            }).catch(e => console.warn("Fallback fetch failed", e));
+                                    }
+
                                     // Determine type badge logic
                                     let typeLabel = 'Stock';
                                     let typeClass = 'basket-type-stock';
@@ -4122,6 +4195,12 @@
                                                     <span><i class="bi bi-layers me-1"></i>${item.quantity} Qty</span>
                                                     <span><i class="bi bi-tag me-1"></i>${item.order_type === 'MKT' ? 'Market' : "₹" + item.price}</span>
                                                     <span><i class="bi bi-box me-1"></i>${item.product_type}</span>
+                                                </div>
+                                                <div class="d-flex gap-3 mt-1 opacity-75 basket-static-meta" style="font-size: 0.65rem; color: #6c757d;">
+                                                    <span><span class="fw-bold">L:</span> ${item.lower_circuit || '-'}</span>
+                                                    <span><span class="fw-bold">U:</span> ${item.upper_circuit || '-'}</span>
+                                                    <span><span class="fw-bold">Tick:</span> ${item.tick_size}</span>
+                                                    <span><span class="fw-bold">Lot:</span> ${item.lot_size}</span>
                                                 </div>
                                             </div>
                                             <div class="ms-2 text-muted">
@@ -4234,8 +4313,18 @@
                 if (input) {
                     const step = parseFloat(input.step) || 1;
                     let val = parseFloat(input.value) || 0;
-                    val = Math.max(0, val + delta);
-                    input.value = val.toFixed(2).replace(/\.?0+$/, '');
+                    val = val + delta;
+                    
+                    if (field === 'qty') {
+                        // Qty must be >= lot_size
+                        if (val < step) val = step;
+                    } else {
+                        // Price must be >= 0
+                        if (val < 0) val = 0;
+                    }
+                    
+                    // Format to avoid floating point precision errors
+                    input.value = parseFloat(val.toFixed(field === 'qty' ? 0 : 4));
                     updateBasketItemField(id, field === 'qty' ? 'quantity' : 'price', input.value);
                 }
             };
@@ -4299,6 +4388,17 @@
                                 <span><i class="bi bi-tag me-1"></i>${updatedData.order_type === 'MKT' ? 'Market' : "₹" + updatedData.price}</span>
                                 <span><i class="bi bi-box me-1"></i>${updatedData.product_type}</span>
                             `;
+                            
+                            // Update static meta if it exists (circuits might have updated if backend returned them)
+                            const staticMeta = li.querySelector('.basket-static-meta');
+                            if (staticMeta) {
+                                staticMeta.innerHTML = `
+                                    <span><span class="fw-bold">L:</span> ${updatedData.lower_circuit || '-'}</span>
+                                    <span><span class="fw-bold">U:</span> ${updatedData.upper_circuit || '-'}</span>
+                                    <span><span class="fw-bold">Tick:</span> ${updatedData.tick_size}</span>
+                                    <span><span class="fw-bold">Lot:</span> ${updatedData.lot_size}</span>
+                                `;
+                            }
                             
                             // Update error badges
                             const headerBadges = li.querySelector('.d-flex.align-items-center.gap-1.mb-1');
