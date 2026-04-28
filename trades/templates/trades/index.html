@@ -992,7 +992,7 @@
                     <div class="tab-pane fade" id="holdings-tab-pane" role="tabpanel" aria-labelledby="holdings-tab" tabindex="0">
                          {% if holdings %}
                          <div class="table-responsive">
-                            <table class="table table-hover caption-top">
+                            <table class="table table-hover caption-top" id="holdings-table">
                                 <caption>Your current stock holdings. Live prices will update automatically.</caption>
                                 <thead class="table-light">
                                     <tr>
@@ -1005,7 +1005,7 @@
                                 </thead>
                                 <tbody>
                                     {% for holding in holdings %}
-                                    <tr data-token="{{ holding.instrument_token }}" data-exch="{{ holding.exchange_segment }}">
+                                    <tr data-token="{{ holding.instrument_token }}" data-exch="{{ holding.exchange_segment }}" data-qty="{{ holding.quantity }}" data-avg="{{ holding.average_price }}">
                                         <td class="fw-bold">{{ holding.tradingsymbol }}</td>
                                         <td data-quantity="{{ holding.quantity }}">{{ holding.quantity }}</td>
                                         <td data-avg-price="{{ holding.average_price }}">₹{{ holding.average_price|floatformat:2 }}</td>
@@ -1029,7 +1029,7 @@
                     <div class="tab-pane fade" id="positions-tab-pane" role="tabpanel" aria-labelledby="positions-tab" tabindex="0">
                         {% if positions %}
                         <div class="table-responsive">
-                            <table class="table table-hover caption-top">
+                            <table class="table table-hover caption-top" id="positions-table">
                                 <caption>Your current open positions.</caption>
                                 <thead class="table-light">
                                     <tr>
@@ -1043,15 +1043,15 @@
                                 </thead>
                                 <tbody>
                                     {% for position in positions %}
-                                    <tr>
+                                    <tr data-token="{{ position.token }}" data-exch="{{ position.exchange }}" data-qty="{{ position.qty }}" data-avg="{{ position.avgPrc }}">
                                         <td class="fw-bold">{{ position.trdSym }}</td>
                                         <td>{{ position.qty }}</td>
                                         <td>₹{{ position.avgPrc|floatformat:2 }}</td>
-                                        <td>₹{{ position.ltp|floatformat:2 }}</td>
-                                        <td class="{% if position.pnl > 0 %}text-success{% elif position.pnl < 0 %}text-danger{% endif %}">
+                                        <td id="pos-ltp-{{ position.token }}">₹{{ position.ltp|floatformat:2 }}</td>
+                                        <td id="pos-pnl-{{ position.token }}" class="{% if position.pnl > 0 %}text-success{% elif position.pnl < 0 %}text-danger{% endif %}">
                                             ₹{{ position.pnl|floatformat:2 }}
                                         </td>
-                                        <td class="{% if position.dayPnl > 0 %}text-success{% elif position.dayPnl < 0 %}text-danger{% endif %}">
+                                        <td id="pos-daypnl-{{ position.token }}" class="{% if position.dayPnl > 0 %}text-success{% elif position.dayPnl < 0 %}text-danger{% endif %}">
                                             ₹{{ position.dayPnl|floatformat:2 }}
                                         </td>
                                     </tr>
@@ -1388,9 +1388,12 @@
 
             tradeSocket.onopen = function(e) {
                 console.log("WebSocket connection established");
-                const holdingsTab = document.getElementById('holdings-tab');
-                if (holdingsTab && holdingsTab.classList.contains('active')) {
-                    manageHoldingsSubscription(true);
+                // Initial subscriptions for active tabs
+                if (document.getElementById('holdings-tab').classList.contains('active')) {
+                    manageTableSubscriptions('holdings-table', true);
+                }
+                if (document.getElementById('positions-tab').classList.contains('active')) {
+                    manageTableSubscriptions('positions-table', true);
                 }
             };
             
@@ -1407,11 +1410,14 @@
                 }
             }
 
-            function manageHoldingsSubscription(subscribe) {
-                const holdingRows = document.querySelectorAll("[data-token]");
-                if (holdingRows.length === 0) return;
+            function manageTableSubscriptions(tableId, subscribe) {
+                const table = document.getElementById(tableId);
+                if (!table) return;
                 
-                const instruments = Array.from(holdingRows).map(row => {
+                const rows = table.querySelectorAll("tbody tr[data-token]");
+                if (rows.length === 0) return;
+                
+                const instruments = Array.from(rows).map(row => {
                     return { "instrument_token": row.dataset.token, "exchange_segment": row.dataset.exch || "nse_cm" };
                 });
                 
@@ -1423,17 +1429,33 @@
                 if (isSocketAuthenticated && tradeSocket.readyState === WebSocket.OPEN) {
                     tradeSocket.send(JSON.stringify(payload));
                 } else if (subscribe) {
-                    // Only queue subscriptions if not yet authenticated.
                     pendingSubscriptions.push(payload);
                     processPendingSubscriptions();
                 }
             }
 
-            const holdingsTab = document.getElementById('holdings-tab');
-            if (holdingsTab) {
-                holdingsTab.addEventListener('shown.bs.tab', () => manageHoldingsSubscription(true));
-                holdingsTab.addEventListener('hidden.bs.tab', () => manageHoldingsSubscription(false));
-            }
+            // Tab change listener to manage subscriptions
+            document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tabEl => {
+                tabEl.addEventListener('shown.bs.tab', event => {
+                    const targetId = event.target.getAttribute('data-bs-target');
+                    if (targetId === '#holdings-tab-pane') {
+                        manageTableSubscriptions('holdings-table', true);
+                    } else if (targetId === '#positions-tab-pane') {
+                        manageTableSubscriptions('positions-table', true);
+                    }
+                });
+                
+                tabEl.addEventListener('hide.bs.tab', event => {
+                    const targetId = event.target.getAttribute('data-bs-target');
+                    if (targetId === '#holdings-tab-pane') {
+                        manageTableSubscriptions('holdings-table', false);
+                    } else if (targetId === '#positions-tab-pane') {
+                        manageTableSubscriptions('positions-table', false);
+                    }
+                });
+            });
+
+            // Tab subscriptions are now handled by the generic listener above
 
             let currentDepthSymbol = null;
             let currentDepthExch = null;
@@ -1515,17 +1537,39 @@
                         }
 
                         // 1. Update Holdings LTP/PNL
-                        const ltpCell = document.getElementById(`ltp-${instrumentSymbol}`);
-                        if (ltpCell && quote.ltp) {
+                        const hLtpCell = document.getElementById(`ltp-${instrumentSymbol}`);
+                        if (hLtpCell && quote.ltp) {
                             const lastPrice = parseFloat(quote.ltp);
                             if (!isNaN(lastPrice)) {
-                                ltpCell.innerText = `₹${lastPrice.toFixed(2)}`;
+                                hLtpCell.innerText = `₹${lastPrice.toFixed(2)}`;
 
                                 const pnlCell = document.getElementById(`pnl-${instrumentSymbol}`);
                                 if (pnlCell) {
-                                    const row = ltpCell.closest('tr');
-                                    const avgPrice = parseFloat(row.querySelector('[data-avg-price]').dataset.avgPrice);
-                                    const quantityVal = parseInt(row.querySelector('[data-quantity]').dataset.quantity);
+                                    const row = hLtpCell.closest('tr');
+                                    const avgPrice = parseFloat(row.dataset.avg);
+                                    const quantityVal = parseInt(row.dataset.qty);
+                                    
+                                    if (!isNaN(avgPrice) && !isNaN(quantityVal)) {
+                                        const pnl = (lastPrice - avgPrice) * quantityVal;
+                                        pnlCell.innerHTML = `₹${pnl.toFixed(2)} <i class="bi ${pnl > 0 ? 'bi-arrow-up-right' : (pnl < 0 ? 'bi-arrow-down-left' : '')}"></i>`;
+                                        pnlCell.className = `fw-bold ${pnl >= 0 ? 'text-success' : 'text-danger'}`;
+                                    }
+                                }
+                            }
+                        }
+
+                        // 1b. Update Positions LTP/PNL
+                        const pLtpCell = document.getElementById(`pos-ltp-${instrumentSymbol}`);
+                        if (pLtpCell && quote.ltp) {
+                            const lastPrice = parseFloat(quote.ltp);
+                            if (!isNaN(lastPrice)) {
+                                pLtpCell.innerText = `₹${lastPrice.toFixed(2)}`;
+
+                                const pnlCell = document.getElementById(`pos-pnl-${instrumentSymbol}`);
+                                if (pnlCell) {
+                                    const row = pLtpCell.closest('tr');
+                                    const avgPrice = parseFloat(row.dataset.avg);
+                                    const quantityVal = parseInt(row.dataset.qty);
                                     
                                     if (!isNaN(avgPrice) && !isNaN(quantityVal)) {
                                         const pnl = (lastPrice - avgPrice) * quantityVal;

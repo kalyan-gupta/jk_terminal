@@ -1388,11 +1388,51 @@ def index(request):
         if portfolio_summary['total_invested'] > 0:
             portfolio_summary['pnl_percentage'] = (portfolio_summary['total_pnl'] / portfolio_summary['total_invested']) * 100
 
+    # Process positions
+    processed_positions = []
+    if isinstance(positions, list):
+        for p in positions:
+            if not isinstance(p, dict):
+                continue
+            
+            try:
+                # Calculate net quantity
+                cf_buy = float(p.get('cfBuyQty', 0))
+                cf_sell = float(p.get('cfSellQty', 0))
+                fl_buy = float(p.get('flBuyQty', 0))
+                fl_sell = float(p.get('flSellQty', 0))
+                
+                qty = (cf_buy + fl_buy) - (cf_sell + fl_sell)
+                
+                # Calculate average price
+                # Buy Avg = (cfBuyAmt + buyAmt) / (cfBuyQty + flBuyQty)
+                buy_amt = float(p.get('buyAmt', 0)) + float(p.get('cfBuyAmt', 0))
+                buy_qty = cf_buy + fl_buy
+                avg_price = buy_amt / buy_qty if buy_qty > 0 else 0
+                
+                # Initial LTP and PNL
+                ltp = float(p.get('upldPrc', 0)) or avg_price
+                pnl = (ltp - avg_price) * qty
+                
+                processed_positions.append({
+                    'trdSym': p.get('trdSym', 'N/A'),
+                    'token': str(p.get('tok', '')),
+                    'exchange': p.get('exSeg', 'nse_cm'),
+                    'qty': int(qty),
+                    'avgPrc': avg_price,
+                    'ltp': ltp,
+                    'pnl': pnl,
+                    'dayPnl': 0, # Day P&L needs more complex calculation or API support
+                    'multiplier': float(p.get('multiplier', 1)),
+                })
+            except (ValueError, TypeError, ZeroDivisionError):
+                continue
+
     context = {
         'api_response': api_response,
         'account_info': account_info,
         'holdings': processed_holdings,
-        'positions': positions,
+        'positions': processed_positions,
         'limits': limits,
         'order_book': order_book,
         'portfolio_summary': portfolio_summary,
