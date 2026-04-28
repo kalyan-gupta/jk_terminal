@@ -54,7 +54,7 @@ def _perform_scrip_cache_refresh():
             return False, "No scrip CSV files found."
 
         with _duckdb_lock:
-            _duckdb_connection.execute('DROP VIEW IF EXISTS active_market_data')
+            # _duckdb_connection.execute('DROP VIEW IF EXISTS active_market_data')
             _duckdb_connection.execute('DROP TABLE IF EXISTS active_market_data')
             _duckdb_connection.execute('DROP TABLE IF EXISTS temp_market_data')
             file_list_sql = ', '.join(_quote_sql_string(path) for path in csv_files)
