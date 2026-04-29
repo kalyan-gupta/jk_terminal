@@ -20,8 +20,8 @@ def setup_env():
         with open(env_path, 'w') as f:
             f.write(f'SECRET_KEY="{secret_key}"\n')
             f.write(f'ENCRYPTION_KEY="{encryption_key}"\n')
-            f.write(f'DEBUG="True"\n')
-        print("✅ .env file created with new SECRET_KEY, ENCRYPTION_KEY, and DEBUG=True.")
+            f.write(f'DEBUG="False"\n')
+        print("✅ .env file created with new SECRET_KEY, ENCRYPTION_KEY, and DEBUG=False.")
 
 def ensure_venv():
     """Ensure a virtual environment exists and is being used."""
