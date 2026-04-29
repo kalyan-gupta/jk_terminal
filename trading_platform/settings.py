@@ -13,19 +13,23 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 import uuid
 import os
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from .env file
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-v*580nj=cr4_q!@u(n+mopu-^(0tiy+n@z_9q@38mrede6j9#%'
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-v*580nj=cr4_q!@u(n+mopu-^(0tiy+n@z_9q@38mrede6j9#%')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = ['*']
 
@@ -127,26 +131,19 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Kotak Neo Trade API credentials
-# IMPORTANT: Storing credentials in this file is not secure.
-# In a production environment, use environment variables or a secrets management tool.
+# NOTE: Credentials are now managed through the database/UI and encrypted using ENCRYPTION_KEY from .env
 KOTAK_NEO_API_CREDENTIALS = {
-    'MPIN': '114786',
-    'TOTP_SECRET': 'SDJBCSUKBVSJBDJKGJKBJKBCSDJHBCJKBDJKG',  # Replace with your actual TOTP secret
-    'CONSUMER_KEY': 'sdfred32-45sd-245d-23fbd-8dvdsbfdsfv',  # Replace with your actual consumer key
-    'CONSUMER_SECRET': 'YOUR_CONSUMER_SECRET',
-    'MOBILE_NUMBER': '+00000000000',  # Replace with your actual mobile number
-    'UCC': 'DeMO123',  # Replace with your actual UCC
+    'MPIN': 'MPIN_PLACEHOLDER',
+    'TOTP_SECRET': 'TOTP_SECRET_PLACEHOLDER',
+    'CONSUMER_KEY': 'CONSUMER_KEY_PLACEHOLDER',
+    'CONSUMER_SECRET': 'CONSUMER_SECRET_PLACEHOLDER',
+    'MOBILE_NUMBER': '+00000000000',
+    'UCC': 'DEMO123',
     'ACCOUNT_NAME': 'Demo Account',
 }
-
-try:
-    from .credentials import *
-    print("Real credentials loaded.")
-except ImportError:
-    print("Using placeholder credentials. Please update trading_platform/credentials.py with your actual API credentials.")
-    pass
 
 # Session Configuration - 5 minutes expiry on inactivity
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
