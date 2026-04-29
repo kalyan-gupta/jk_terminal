@@ -4950,27 +4950,36 @@
                 if (data.needs_refresh) {
                     console.log("Scrip refresh needed:", data.reason);
                     scripModal.show();
-                    startScripRefreshFlow();
+                    startScripRefreshFlow(data.reason);
                 }
             })
             .catch(err => console.error("Error checking scrip status:", err));
 
-        async function startScripRefreshFlow() {
+        async function startScripRefreshFlow(reason) {
             try {
-                // Step 1: Download
-                statusText.innerText = "Downloading latest scrip master files from Kotak Neo...";
-                progressBar.style.width = "30%";
-                
-                const downloadResponse = await fetch('/refresh_scrip_master/');
-                const downloadData = await downloadResponse.json();
-                
-                if (downloadData.status !== 'success') {
-                    throw new Error(downloadData.message || "Download failed");
+                // Step 1: Download (Skip if cache is just empty but files are OK)
+                if (reason === 'Cache empty') {
+                    statusText.innerText = "Scrip files are up-to-date. Initializing cache...";
+                    progressBar.style.width = "40%";
+                    step1.classList.remove('fw-bold', 'text-primary');
+                    step1.classList.add('text-success');
+                    step1.innerHTML = '1. Download <i class="bi bi-check-circle-fill"></i>';
+                } else {
+                    statusText.innerText = "Downloading latest scrip master files from Kotak Neo...";
+                    progressBar.style.width = "30%";
+                    
+                    const downloadResponse = await fetch('/refresh_scrip_master/');
+                    const downloadData = await downloadResponse.json();
+                    
+                    if (downloadData.status !== 'success') {
+                        throw new Error(downloadData.message || "Download failed");
+                    }
+                    
+                    step1.classList.remove('fw-bold', 'text-primary');
+                    step1.classList.add('text-success');
+                    step1.innerHTML = '1. Download <i class="bi bi-check-circle-fill"></i>';
                 }
                 
-                step1.classList.remove('fw-bold', 'text-primary');
-                step1.classList.add('text-success');
-                step1.innerHTML = '1. Download <i class="bi bi-check-circle-fill"></i>';
                 step2.classList.add('fw-bold', 'text-primary');
                 
                 // Step 2: Cache

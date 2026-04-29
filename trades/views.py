@@ -850,8 +850,19 @@ def check_scrip_status(request):
                 'latest_update': latest_dt.strftime('%Y-%m-%d %H:%M:%S'),
                 'cutoff': cutoff_time.strftime('%Y-%m-%d %H:%M:%S')
             })
+            
+        # If files are OK, check if cache is actually loaded in DuckDB
+        with _duckdb_lock:
+            table_check = _duckdb_connection.execute("SELECT count(*) FROM information_schema.tables WHERE table_name = 'active_market_data'").fetchone()[0]
+            if table_check == 0:
+                return JsonResponse({'needs_refresh': True, 'reason': 'Cache empty'})
+            
+            count = _duckdb_connection.execute("SELECT count(*) FROM active_market_data").fetchone()[0]
+            if count == 0:
+                return JsonResponse({'needs_refresh': True, 'reason': 'Cache empty'})
+                
     except Exception as e:
-        return JsonResponse({'needs_refresh': True, 'reason': f'Error checking files: {str(e)}'})
+        return JsonResponse({'needs_refresh': True, 'reason': f'Error checking files/cache: {str(e)}'})
 
     return JsonResponse({'needs_refresh': False})
 
@@ -1387,8 +1398,7 @@ def index(request):
     api_response = None
     logger.info(f"User '{request.user.username}' loading trading dashboard.")
     
-    # Auto-refresh scrip cache if empty
-    ensure_scrip_cache()
+    # Scrip cache is now handled asynchronously via check_scrip_status and the frontend modal
     
     # Check if user has credentials setup
     try:
