@@ -89,6 +89,32 @@ python manage.py createsuperuser
 
 ---
 
+## 🏁 Getting Started (First-Time Users)
+
+If you are setting up your account for the first time, follow this workflow to enable trading:
+
+### 1. Registration
+- Navigate to the login page and click **"Sign up here"**.
+- After creating your account, you will be redirected to the Dashboard.
+
+### 2. Configure Neo API SDK
+The terminal needs your Kotak Neo API credentials to interact with the exchange.
+- Go to the **Profile** or **Credentials** section.
+- Provide your **MPIN**, **Consumer Key**, **Mobile Number** (formatted as `+91XXXXXXXXXX`), and **UCC**.
+- Your sensitive data (MPIN, Consumer Key) is automatically encrypted using the `ENCRYPTION_KEY` in your `.env` file before being saved to the database.
+
+### 3. Authenticate Session
+- On the dashboard, click **"Authenticate Session"**.
+- Enter the **TOTP code** from your authenticator app to establish a secure connection with Kotak Neo.
+- **Note**: For security, SDK sessions expire automatically. You will need to re-authenticate if you have been inactive or if the session interval (default 30 min) has passed.
+
+### 4. 🔄 Daily Maintenance: Refresh Scrip Master
+Instrument tokens and strike prices change frequently. **You must refresh the Scrip Master data every day before you start trading.**
+- Click the **"Refresh Scrip Master"** button on the dashboard.
+- This will download the latest instrument files from the Kotak Neo server and update your local DuckDB cache.
+
+---
+
 ## 🚀 Running the Terminal
 
 The easiest way to start the terminal is using the included `run.py` script, which automatically checks for migrations and starts the server:
