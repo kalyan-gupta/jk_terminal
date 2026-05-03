@@ -352,6 +352,64 @@
                     </table>
                 </div>
             </div>
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-broadcast me-2"></i>Active User Sessions</h5>
+            </div>
+            <div class="card-body p-0">
+                <p class="text-muted small px-4 pt-3 mb-2">These are current active browser sessions. Terminating a session will immediately log out the user from that browser/tab.</p>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">User</th>
+                                <th>IP Address</th>
+                                <th>Last Activity</th>
+                                <th>SDK Status</th>
+                                <th class="text-end pe-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for session in active_sessions %}
+                            <tr {% if session.session_key == request.session.session_key %}class="table-primary opacity-75"{% endif %}>
+                                <td class="ps-4">
+                                    <div class="fw-medium">{{ session.user.username }}</div>
+                                    <div class="text-muted small">{{ session.user.get_full_name|default:"" }}</div>
+                                </td>
+                                <td class="font-monospace small">{{ session.ip_address|default:"-" }}</td>
+                                <td>
+                                    <div>{{ session.last_activity|date:"d M, H:i:s" }}</div>
+                                    <div class="text-muted small">{{ session.last_activity|timesince }} ago</div>
+                                </td>
+                                <td>
+                                    {% if session.sdk_session_active %}
+                                        <span class="badge bg-success" title="Expires at: {{ session.sdk_session_expires_at }}">SDK Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">SDK Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end pe-4">
+                                    {% if session.session_key == request.session.session_key %}
+                                        <span class="badge bg-primary">Current Session</span>
+                                    {% else %}
+                                        <form method="post" action="{% url 'admin_delete_session' session.id %}" class="d-inline" onsubmit="return confirm('Are you sure you want to terminate this session for {{ session.user.username }}?');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="bi bi-x-circle-fill me-1"></i> Terminate
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center py-4 text-muted">No active sessions found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </main>
     

@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.contrib import messages
 from django.http import JsonResponse
 from django.conf import settings
+from django.contrib.sessions.models import Session
 from .kotak_neo_api import KotakNeoAPI
 from .models import UserNeoCredentials, SessionActivity, SMTPSettings, UserSecurity, PlatformSettings
 from .forms import LoginForm, RegistrationForm, UserNeoCredentialsForm, UserProfileForm, TOTPForm, ForgotPasswordForm, SetNewPasswordForm, ChangePasswordForm, OTPVerifyForm
@@ -645,11 +646,6 @@ def admin_settings_view(request):
         platform_settings.save()
 
         if old_allow_restore != new_allow_restore:
-            from django.contrib.sessions.models import Session
-            from .models import SessionActivity
-            from .kotak_neo_api import KotakNeoAPI
-            from django.contrib.auth import logout
-            
             # Delete all other sessions except the current one
             current_session_key = request.session.session_key
             if current_session_key:
@@ -668,12 +664,14 @@ def admin_settings_view(request):
         return redirect('admin_settings')
 
     users = User.objects.all().order_by('-is_superuser', 'username')
+    active_sessions = SessionActivity.objects.select_related('user').all().order_by('user__username', '-last_activity')
     registration_form = RegistrationForm()
 
     return render(request, 'trades/admin_settings.html', {
         'settings': settings_obj,
         'platform_settings': platform_settings,
         'users': users,
+        'active_sessions': active_sessions,
         'registration_form': registration_form
     })
 
@@ -1848,3 +1846,36 @@ def check_sdk_status(request):
         "status": "success",
         "is_authenticated": is_hot
     })
+
+
+@login_required_with_session_check
+def admin_delete_session(request, session_id):
+    """Forcefully terminate a user session"""
+    if not request.user.is_superuser:
+        messages.error(request, "Access denied. Superuser only.")
+        return redirect('index')
+        
+    if request.method == 'POST':
+        try:
+            activity = SessionActivity.objects.get(id=session_id)
+            session_key = activity.session_key
+            username = activity.user.username
+            ip_addr = activity.ip_address
+            
+            # 1. Delete the Django session
+            if session_key:
+                Session.objects.filter(session_key=session_key).delete()
+            
+            # 2. Delete the activity record
+            activity.delete()
+            
+            messages.success(request, f"Session for user '{username}' (IP: {ip_addr}) was terminated.")
+            logger.info(f"Admin {request.user.username} terminated session for {username} (IP: {ip_addr})")
+            
+        except SessionActivity.DoesNotExist:
+            messages.error(request, "Session no longer exists.")
+        except Exception as e:
+            logger.error(f"Error deleting session: {e}")
+            messages.error(request, f"Error terminating session: {str(e)}")
+            
+    return redirect('admin_settings')
