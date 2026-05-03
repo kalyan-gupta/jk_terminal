@@ -72,6 +72,8 @@ class KotakNeoAPI:
                 if session_activity.sdk_session_data:
                     decrypted_data = session_activity.decrypt_data(session_activity.sdk_session_data)
                     session_info = pickle.loads(decrypted_data)
+                    # Track that this session was restored from DB (indicates a server restart happened)
+                    session_info['restored'] = True
                     # Restore to memory cache
                     KotakNeoAPI._session_cache[self.cache_key] = session_info
             except Exception as e:
@@ -171,7 +173,11 @@ class KotakNeoAPI:
                 self.client = cached['client']
                 self.login_data = cached['login_data']
                 self.is_authenticated = True
-                return {"status": "success", "message": "Already authenticated"}
+                return {
+                    "status": "success", 
+                    "message": "Already authenticated",
+                    "restored": cached.get('restored', False)
+                }
 
         if not self.client:
             return {"error": "API client not initialized. Please configure your credentials."}

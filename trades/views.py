@@ -909,58 +909,56 @@ def change_password_view(request):
 
 # ==================== Trading Views (Protected) ====================
 
-@login_required_with_session_check
-def check_scrip_status(request):
-    """Check if scrip master files exist and are up to date (from today)."""
-    from datetime import datetime, time as dt_time
+def _check_scrip_status_logic():
+    """Internal logic to check if scrip master files exist and are up to date."""
+    from datetime import datetime
     
     scrip_dir = os.path.join(settings.BASE_DIR, 'trades', 'scrip_data')
     
-    # Check if directory exists
     if not os.path.exists(scrip_dir):
-        return JsonResponse({'needs_refresh': True, 'reason': 'Directory missing'})
+        return {'needs_refresh': True, 'reason': 'Directory missing'}
     
-    # Get all CSV files
     csv_files = glob.glob(os.path.join(scrip_dir, '*.csv'))
     if not csv_files:
-        return JsonResponse({'needs_refresh': True, 'reason': 'No files found'})
+        return {'needs_refresh': True, 'reason': 'No files found'}
     
-    # Check if files are from today (cutoff 8:00 AM)
     now = timezone.now()
     cutoff_time = now.replace(hour=8, minute=0, second=0, microsecond=0)
     
-    # If it's before 8 AM today, we consider yesterday's files valid until 8 AM
     if now.hour < 8:
         cutoff_time = cutoff_time - timezone.timedelta(days=1)
     
-    # Check the modification time of the files
-    # We assume if one is old, all are old
     try:
         latest_mtime = max(os.path.getmtime(f) for f in csv_files)
         latest_dt = timezone.make_aware(datetime.fromtimestamp(latest_mtime))
         
         if latest_dt < cutoff_time:
-            return JsonResponse({
+            return {
                 'needs_refresh': True, 
                 'reason': 'Data outdated', 
                 'latest_update': latest_dt.strftime('%Y-%m-%d %H:%M:%S'),
                 'cutoff': cutoff_time.strftime('%Y-%m-%d %H:%M:%S')
-            })
+            }
             
-        # If files are OK, check if cache is actually loaded in DuckDB
         with _duckdb_lock:
             table_check = _duckdb_connection.execute("SELECT count(*) FROM information_schema.tables WHERE table_name = 'active_market_data'").fetchone()[0]
             if table_check == 0:
-                return JsonResponse({'needs_refresh': True, 'reason': 'Cache empty'})
+                return {'needs_refresh': True, 'reason': 'Cache empty'}
             
             count = _duckdb_connection.execute("SELECT count(*) FROM active_market_data").fetchone()[0]
             if count == 0:
-                return JsonResponse({'needs_refresh': True, 'reason': 'Cache empty'})
+                return {'needs_refresh': True, 'reason': 'Cache empty'}
                 
     except Exception as e:
-        return JsonResponse({'needs_refresh': True, 'reason': f'Error checking files/cache: {str(e)}'})
+        return {'needs_refresh': True, 'reason': f'Error checking files/cache: {str(e)}'}
 
-    return JsonResponse({'needs_refresh': False})
+    return {'needs_refresh': False}
+
+
+@login_required_with_session_check
+def check_scrip_status(request):
+    """Check if scrip master files exist and are up to date (from today)."""
+    return JsonResponse(_check_scrip_status_logic())
 
 
 @login_required_with_session_check

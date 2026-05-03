@@ -2,6 +2,7 @@ import json
 import logging
 import uuid
 import threading
+import time
 from collections import defaultdict
 from channels.generic.websocket import WebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
@@ -9,6 +10,7 @@ from .kotak_neo_api import KotakNeoAPI
 from trading_platform.logging_utils import request_id_var, request_user_var
 
 logger = logging.getLogger(__name__)
+SERVER_START_TIME = time.time()
 
 # Global state to track WebSocket connections per user
 # Structure:
@@ -92,7 +94,21 @@ class LiveQuotesConsumer(WebsocketConsumer):
                     USER_WS_STATE[self.ws_group_key]['master_session'] = self.ws_session_id
 
             logger.info(f"WebSocket connected for user '{user_name}' (Session: {self.ws_session_id})")
-            self.send(text_data=json.dumps({'message': 'Connected and authenticated'}))
+            
+            # Send initial server status
+            from .views import _check_scrip_status_logic
+            from .models import PlatformSettings
+            
+            p_settings = PlatformSettings.get_settings()
+            scrip_status = _check_scrip_status_logic()
+            
+            self.send(text_data=json.dumps({
+                'type': 'server_init',
+                'server_start_time': SERVER_START_TIME,
+                'session_restored': auth_response.get('restored', False) and p_settings.allow_session_restore,
+                'needs_scrip_refresh': scrip_status.get('needs_refresh', False),
+                'message': 'Connected and authenticated'
+            }))
 
     def disconnect(self, close_code):
         if not self.user_id or not self.ws_session_id: return
@@ -154,6 +170,10 @@ class LiveQuotesConsumer(WebsocketConsumer):
                 self.handle_visibility(params.get('visible', True))
             elif action == 'claim_master':
                 self.handle_claim_master()
+            elif action == 'modal_acknowledged':
+                self.broadcast_hide_modal(params.get('modal_id'))
+            elif action == 'scrip_refresh_complete':
+                self.broadcast_hide_modal('scripRefreshModal')
             else:
                 logger.warning(f"Unknown message type received: {action}")
 
@@ -254,6 +274,17 @@ class LiveQuotesConsumer(WebsocketConsumer):
             state['master_session'] = self.ws_session_id
             self.apply_all_subscriptions()
             self.send(text_data=json.dumps({"type": "status", "message": "Feed resumed (active tab)"}))
+
+    def broadcast_hide_modal(self, modal_id):
+        if not self.ws_group_key: return
+        with ws_state_lock:
+            state = USER_WS_STATE[self.ws_group_key]
+            for sid, info in state['sessions'].items():
+                if sid != self.ws_session_id:
+                    info['consumer'].send(text_data=json.dumps({
+                        'type': 'hide_modal',
+                        'modal_id': modal_id
+                    }))
 
     def on_quote(self, quote):
         # We only send data if this consumer is the current master

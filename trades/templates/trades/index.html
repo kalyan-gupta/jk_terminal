@@ -1830,6 +1830,11 @@
                     }
                 }
 
+                // Don't connect if already connecting or open
+                if (tradeSocket && (tradeSocket.readyState === WebSocket.CONNECTING || tradeSocket.readyState === WebSocket.OPEN)) {
+                    return;
+                }
+
                 // Don't connect if re-auth modal is already visible
                 const authModalEl = document.getElementById('sdkAuthRequiredModal');
                 if (authModalEl && (authModalEl.classList.contains('show') || authModalEl.style.display === 'block')) {
@@ -1857,10 +1862,12 @@
                     setTimeout(processPendingSubscriptions, 1000);
                     
                     // Immediately send visibility state
-                    tradeSocket.send(JSON.stringify({
-                        'action': 'set_visibility',
-                        'params': {'visible': document.visibilityState === 'visible'}
-                    }));
+                    if (tradeSocket.readyState === WebSocket.OPEN) {
+                        tradeSocket.send(JSON.stringify({
+                            'action': 'set_visibility',
+                            'params': {'visible': document.visibilityState === 'visible'}
+                        }));
+                    }
                 };
                 
                 tradeSocket.onmessage = function(e) {
@@ -1954,6 +1961,49 @@
                                 }
                             }
                         });
+                    } else if (incoming_data.type === 'server_init') {
+                        console.log("Server Initialization Received. Start Time:", incoming_data.server_start_time);
+                        isSocketAuthenticated = true;
+                        window.isSDKAuthenticated = true;
+                        processPendingSubscriptions();
+                        
+                        // Store start time globally for the session
+                        window.currentServerStartTime = incoming_data.server_start_time;
+                        
+                        // Handle Server Restart Modal
+                        const lastAcknowledged = localStorage.getItem('lastAcknowledgedRestart');
+                        if (incoming_data.session_restored && incoming_data.server_start_time.toString() !== lastAcknowledged) {
+                            const restoreModalEl = document.getElementById('sessionRestoredModal');
+                            if (restoreModalEl) {
+                                var restoreModal = bootstrap.Modal.getOrCreateInstance(restoreModalEl);
+                                restoreModal.show();
+                            }
+                        }
+                        
+                        // Handle Scrip Refresh Modal
+                        if (incoming_data.needs_scrip_refresh) {
+                            const scripModalEl = document.getElementById('scripRefreshModal');
+                            if (scripModalEl && !scripModalEl.classList.contains('show')) {
+                                var scripModal = bootstrap.Modal.getOrCreateInstance(scripModalEl);
+                                scripModal.show();
+                                if (typeof window.startScripRefreshFlow === 'function') {
+                                    window.startScripRefreshFlow('Server indicated refresh needed');
+                                }
+                            }
+                        }
+                    } else if (incoming_data.type === 'hide_modal') {
+                        console.log("Hiding modal as requested by server:", incoming_data.modal_id);
+                        const modalEl = document.getElementById(incoming_data.modal_id);
+                        if (modalEl) {
+                            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                            if (modalInstance) {
+                                modalInstance.hide();
+                                if (incoming_data.modal_id === 'sessionRestoredModal' && window.currentServerStartTime) {
+                                     localStorage.setItem('lastAcknowledgedRestart', window.currentServerStartTime.toString());
+                                }
+                                showNotification(`${incoming_data.modal_id.replace('Modal', '').replace(/([A-Z])/g, ' $1').trim()} acknowledged in another tab.`, 'info');
+                            }
+                        }
                     } else if (incoming_data.type === 'auth_failure') {
                         console.error("WebSocket Authentication Failure:", incoming_data.message);
                         window.isSDKAuthenticated = false;
@@ -5103,7 +5153,7 @@
             })
             .catch(err => console.error("Error checking scrip status:", err));
 
-        async function startScripRefreshFlow(reason) {
+        window.startScripRefreshFlow = async function(reason) {
             try {
                 // Step 1: Download (Skip if cache is just empty but files are OK)
                 if (reason === 'Cache empty') {
@@ -5154,6 +5204,12 @@
                     scripModal.hide();
                     if (typeof showNotification === 'function') {
                         showNotification('Scrip master and cache updated successfully for today.', 'success');
+                    }
+                    // Notify other tabs via WebSocket
+                    if (tradeSocket && tradeSocket.readyState === WebSocket.OPEN) {
+                        tradeSocket.send(JSON.stringify({
+                            'action': 'scrip_refresh_complete'
+                        }));
                     }
                 }, 1000);
                 
@@ -5283,7 +5339,6 @@
         }
     </script>
 
-    {% if show_restore_modal %}
     <!-- Session Restored Modal -->
     <div class="modal fade" id="sessionRestoredModal" tabindex="-1" aria-labelledby="sessionRestoredModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-dialog-centered">
@@ -5309,11 +5364,33 @@
         document.addEventListener("DOMContentLoaded", function() {
             var restoreModalEl = document.getElementById('sessionRestoredModal');
             if (restoreModalEl) {
-                var restoreModal = new bootstrap.Modal(restoreModalEl);
-                restoreModal.show();
+                // Attach synchronization listeners
+                const acknowledgeHandler = function() {
+                    if (window.currentServerStartTime) {
+                        localStorage.setItem('lastAcknowledgedRestart', window.currentServerStartTime.toString());
+                        if (tradeSocket && tradeSocket.readyState === WebSocket.OPEN) {
+                            tradeSocket.send(JSON.stringify({
+                                'action': 'modal_acknowledged',
+                                'params': {'modal_id': 'sessionRestoredModal'}
+                            }));
+                        }
+                    }
+                };
+                
+                // Track if user acknowledged via any button
+                restoreModalEl.querySelectorAll('button').forEach(btn => {
+                    btn.addEventListener('click', acknowledgeHandler);
+                });
+                
+                // If it was already shown by template logic, we need to make sure we have the start time
+                // But the template doesn't have the unique start time, so we rely on the server_init
+                // to either show it or hide it if already acknowledged.
+                
+                // Handle already acknowledged states
+                const lastAck = localStorage.getItem('lastAcknowledgedRestart');
+                // We'll hide it in server_init if it matches.
             }
         });
     </script>
-    {% endif %}
 </body>
 </html>
