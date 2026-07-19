@@ -1,0 +1,20 @@
+services:
+  web:
+    build: .
+    container_name: jk_terminal_web
+    restart: always
+    # Bind to 127.0.0.1:8000 to keep it private. Only processes on the host VPS (or WireGuard
+    # tunnel when routed through host localhost/nginx proxy) can access it.
+    # To bind directly to your WireGuard IP (e.g., if your WireGuard interface IP is 10.8.0.1),
+    # change this to: "10.8.0.1:8000:8000"
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # Persist SQLite database
+      - ./db.sqlite3:/app/db.sqlite3
+      # Persist logs
+      - ./app_activity.log:/app/app_activity.log
+      # Mount env file for production keys
+      - ./.env:/app/.env
+    environment:
+      - DEBUG=False
