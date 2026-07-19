@@ -79,7 +79,7 @@ def get_basket_ajax(request):
         # Get metadata for all tokens in basket from DuckDB shared memory connection
         from .views import _duckdb_connection, _duckdb_lock
         tokens = [o.instrument_token for o in orders]
-        token_str = ", ".join([f"'{t}'" for t in tokens])
+        placeholders = ", ".join(["?" for _ in tokens])
         
         try:
             with _duckdb_lock:
@@ -89,8 +89,8 @@ def get_basket_ajax(request):
                     CAST(COALESCE(dTickSize, 0) AS DECIMAL) / 100 as dTickSize, lLotSize, pScripRefKey, pOptionType,
                     CAST(COALESCE("dStrikePrice;", 0) AS DECIMAL) / 100 as dStrikePrice
                     FROM active_market_data 
-                    WHERE CAST(pSymbol AS VARCHAR) IN ({token_str})
-                """).df().set_index('pSymbol').to_dict('index')
+                    WHERE CAST(pSymbol AS VARCHAR) IN ({placeholders})
+                """, tokens).df().set_index('pSymbol').to_dict('index')
         except Exception as e:
             logger.error(f"DuckDB error in get_basket: {e}")
             metadata = {}
@@ -356,7 +356,7 @@ def reorder_basket_ajax(request):
     # Fetch metadata for sorting (expiry, strike, etc.)
     from .views import _duckdb_connection, _duckdb_lock
     tokens = [o.instrument_token for o in orders]
-    token_str = ", ".join([f"'{t}'" for t in tokens])
+    placeholders = ", ".join(["?" for _ in tokens])
     
     try:
         with _duckdb_lock:
@@ -366,8 +366,8 @@ def reorder_basket_ajax(request):
                 CAST(COALESCE("dStrikePrice;", 0) AS DECIMAL) / 100 as dStrikePrice,
                 try_strptime(regexp_extract(COALESCE(pScripRefKey, ''), '(\\d{{2}}[A-Z]{{3}}\\d{{2}})', 1), '%d%b%y') as expire_date
                 FROM active_market_data 
-                WHERE CAST(pSymbol AS VARCHAR) IN ({token_str})
-            """).df().set_index('pSymbol').to_dict('index')
+                WHERE CAST(pSymbol AS VARCHAR) IN ({placeholders})
+            """, tokens).df().set_index('pSymbol').to_dict('index')
     except Exception as e:
         logger.error(f"DuckDB error in reorder_basket: {e}")
         metadata = {}

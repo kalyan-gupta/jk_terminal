@@ -20,7 +20,7 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 _duckdb_connection = duckdb.connect(database=':memory:')
-_duckdb_lock = threading.Lock()
+_duckdb_lock = threading.RLock()
 
 def _quote_sql_string(value):
     return "'" + value.replace("'", "''") + "'"
@@ -1071,8 +1071,10 @@ def search_scrip_cache(request):
 
             # Build filter conditions
             filters = []
+            params = []
             if exchange != 'all':
-                filters.append(f"pExchSeg = '{exchange}'")
+                filters.append("pExchSeg = ?")
+                params.append(exchange)
 
             if inst_type != 'all':
                 if inst_type == 'stock':
@@ -1087,32 +1089,38 @@ def search_scrip_cache(request):
             # Build elastic search: make it tighter by requiring more matches
             search_terms = search_term.lower().split()
             
-            # Escape single quotes in search terms
-            safe_terms = [term.replace("'", "''") for term in search_terms]
-            
             # Build conditions for options/futures: search only in pScripRefKey (AND logic)
             fno_conditions = []
-            for term in safe_terms:
-                fno_conditions.append(f"LOWER(COALESCE(pScripRefKey, '')) LIKE '%{term}%'")
+            fno_params = []
+            for term in search_terms:
+                fno_conditions.append("LOWER(COALESCE(pScripRefKey, '')) LIKE ?")
+                fno_params.append(f"%{term}%")
             fno_search = " AND ".join(fno_conditions) if fno_conditions else "1=1"
             
             # Build conditions for stocks: search in pScripRefKey OR pDesc (OR logic for terms)
             stock_conditions = []
-            for term in safe_terms:
-                stock_conditions.append(f"""
-                    (LOWER(COALESCE(pScripRefKey, '')) LIKE '%{term}%'
-                    OR LOWER(COALESCE(pDesc, '')) LIKE '%{term}%')
-                """)
+            stock_params = []
+            for term in search_terms:
+                stock_conditions.append(
+                    "(LOWER(COALESCE(pScripRefKey, '')) LIKE ? OR LOWER(COALESCE(pDesc, '')) LIKE ?)"
+                )
+                stock_params.append(f"%{term}%")
+                stock_params.append(f"%{term}%")
             stock_search = " OR ".join(stock_conditions) if stock_conditions else "1=1"
             
             # Combine: prioritize F&O search if looking for options/futures or when exchange is F&O, otherwise use stock search
             if inst_type in ('option', 'future') or exchange in ('nse_fo', 'bse_fo'):
                 final_search = f"({fno_search})"
+                params.extend(fno_params)
             else:
                 # For stocks or non-F&O search, use stock search (looser)
                 final_search = f"({stock_search})"
+                params.extend(stock_params)
 
-            first_term = safe_terms[0] if safe_terms else ''
+            first_term = search_terms[0] if search_terms else ''
+            first_term_pat = f"{first_term}%"
+            params.append(first_term_pat)
+            params.append(first_term_pat)
             
             # Check if user likely wants F&O based on month abbreviations in search
             months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
@@ -1125,8 +1133,8 @@ def search_scrip_cache(request):
                 ORDER BY 
                     -- 1. Exact prefix match gets top priority
                     CASE 
-                        WHEN LOWER(COALESCE(pSymbolName, '')) LIKE '{first_term}%' THEN 0 
-                        WHEN LOWER(COALESCE(pScripRefKey, '')) LIKE '{first_term}%' THEN 1
+                        WHEN LOWER(COALESCE(pSymbolName, '')) LIKE ? THEN 0 
+                        WHEN LOWER(COALESCE(pScripRefKey, '')) LIKE ? THEN 1
                         ELSE 2 
                     END ASC,
                     -- 2. Equity prioritization if no FO intent
@@ -1162,7 +1170,7 @@ def search_scrip_cache(request):
                 LIMIT 50
             """
 
-            results = _duckdb_connection.execute(query).fetchall()
+            results = _duckdb_connection.execute(query, params).fetchall()
             columns = ['pSymbol', 'pExchSeg', 'pSymbolName', 'pTrdSymbol', 'pOptionType', 'pInstType', 'dStrikePrice', 'pScripRefKey', 'pDesc', 'pGroup', 'pAssetCode', 'has_option_chain', 'dTickSize', 'lLotSize']
             
             data = [dict(zip(columns, row)) for row in results]
@@ -1191,7 +1199,7 @@ def get_scrip_info_ajax(request):
         return JsonResponse({'error': 'Missing token or exchange'}, status=400)
 
     try:
-        query = f"""
+        query = """
             SELECT 
                 pSymbol, pExchSeg, pSymbolName, pTrdSymbol, pOptionType, pInstType,
                 CAST(COALESCE("dStrikePrice;", 0) AS DECIMAL) / 100 as dStrikePrice,
@@ -1202,11 +1210,11 @@ def get_scrip_info_ajax(request):
                 CAST(COALESCE(dTickSize, 0) AS DECIMAL) / 100 as dTickSize,
                 CAST(COALESCE(lLotSize, 0) AS INTEGER) as lLotSize
             FROM active_market_data
-            WHERE pSymbol = '{token}' AND pExchSeg = '{exch}'
+            WHERE pSymbol = ? AND pExchSeg = ?
             LIMIT 1
         """
         with _duckdb_lock:
-            results = _duckdb_connection.execute(query).fetchall()
+            results = _duckdb_connection.execute(query, [token, exch]).fetchall()
         
         if not results:
             return JsonResponse({'error': 'Scrip not found in cache'}, status=404)
@@ -1227,7 +1235,7 @@ def get_option_chain_ajax(request):
         return JsonResponse({'error': 'Missing p_symbol'}, status=400)
 
     try:
-        query = f"""
+        query = """
             SELECT 
                 pSymbol, pExchSeg, pSymbolName, pTrdSymbol, pOptionType, pInstType,
                 CAST(COALESCE("dStrikePrice;", 0) AS DECIMAL) / 100 as dStrikePrice,
@@ -1236,13 +1244,13 @@ def get_option_chain_ajax(request):
                 CAST(COALESCE(lLotSize, 0) AS INTEGER) as lLotSize,
                 strftime(expire_date, '%Y-%m-%d') as expire_date_str
             FROM active_market_data
-            WHERE CAST(pAssetCode AS VARCHAR) = '{p_symbol}' 
+            WHERE CAST(pAssetCode AS VARCHAR) = ? 
               AND pInstType IN ('OPTIDX', 'OPTSTK', 'IO', 'SO')
             ORDER BY expire_date, dStrikePrice
         """
         
         with _duckdb_lock:
-            results = _duckdb_connection.execute(query).fetchall()
+            results = _duckdb_connection.execute(query, [p_symbol]).fetchall()
         
         columns = ['pSymbol', 'pExchSeg', 'pSymbolName', 'pTrdSymbol', 'pOptionType', 'pInstType', 'dStrikePrice', 'pScripRefKey', 'pDesc', 'dTickSize', 'lLotSize', 'expire_date_str']
         raw_data = [dict(zip(columns, row)) for row in results]

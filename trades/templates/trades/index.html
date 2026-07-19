@@ -188,6 +188,9 @@
         .text-dark {
             color: var(--text-primary) !important;
         }
+        .bg-warning .text-dark, .modal-header.bg-warning .modal-title {
+            color: #212529 !important;
+        }
         .text-muted {
             color: var(--text-secondary) !important;
         }
@@ -870,11 +873,11 @@
     <div class="modal fade" id="basketModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content shadow-lg border-0">
-                <div class="modal-header bg-dark text-white p-4">
+                <div class="modal-header p-4">
                     <h5 class="modal-title d-flex align-items-center">
                         <i class="bi bi-basket2-fill me-2"></i> Basket Order Manager
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-0">
                     <div class="bg-light p-3 border-bottom d-flex justify-content-between align-items-center">
@@ -1269,7 +1272,7 @@
     <div class="modal fade" id="optionChainModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg">
-                <div class="modal-header bg-dark text-white py-3">
+                <div class="modal-header py-3">
                     <div class="d-flex align-items-center">
                         <div class="bg-primary rounded-circle p-2 me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
                             <i class="bi bi-layers-half text-white"></i>
@@ -1279,18 +1282,18 @@
                                 <span id="oc-symbol-name">Option Chain</span>
                                 <span class="badge bg-white text-dark ms-3 border py-1 px-2" id="oc-underlying-ltp" style="font-size: 0.9rem; font-family: 'Roboto Mono', monospace;">LTP: Loading...</span>
                             </h5>
-                            <span class="text-white-50 small" id="oc-underlying-desc"></span>
+                            <span class="text-secondary small" id="oc-underlying-desc"></span>
                         </div>
                     </div>
                     <div class="ms-auto d-flex align-items-center gap-2">
                         <button id="oc-bulk-basket-btn" class="btn btn-warning btn-sm fw-bold px-3 shadow-sm" style="display: none;" onclick="addOCSelectionToBasket()">
                             <i class="bi bi-cart-plus-fill me-1"></i> Add (<span id="oc-selected-count">0</span>) to Basket
                         </button>
-                        <button class="btn btn-outline-light btn-sm px-3" onclick="openBasketFromOC()">
+                        <button class="btn btn-outline-secondary btn-sm px-3" onclick="openBasketFromOC()">
                             <i class="bi bi-basket2 me-1"></i> Basket
                         </button>
-                        <span class="vr mx-1 bg-white opacity-25"></span>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        <span class="vr mx-1 bg-secondary opacity-25"></span>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                 </div>
                 <div class="modal-body p-0">
