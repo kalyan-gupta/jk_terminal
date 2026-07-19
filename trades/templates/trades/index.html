@@ -17,36 +17,209 @@
             --bs-info-rgb: 13, 202, 240;
             --bs-dark-rgb: 33, 37, 41;
             --bs-light-rgb: 248, 249, 250;
+
+            /* Light Theme Custom Properties (Default) */
+            --bg-primary: #eef2f5;
+            --card-bg: #ffffff;
+            --card-header-bg: #ffffff;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --border-color: #e9ecef;
+            --table-hover-bg: rgba(68, 157, 255, 0.05);
+            --accent-color: #449dff;
+            --accent-hover: #3478c6;
+            --nav-bg: #212529;
+            --glass-blur: none;
+            --glass-bg: #ffffff;
+            --card-shadow: 0 4px 6px rgba(0,0,0,.04);
+            --card-hover-shadow: 0 10px 15px rgba(0,0,0,.06);
+            --input-bg: #ffffff;
+            --input-border: #ced4da;
+            --input-text: #212529;
+            --dropdown-bg: #ffffff;
+            --dropdown-item-hover: #f8f9fa;
+            --badge-bg: #f8f9fa;
+            --close-btn-filter: invert(0);
+        }
+
+        [data-theme="dark"] {
+            --close-btn-filter: invert(1);
+            /* Deep Slate Dark Theme */
+            --bg-primary: #0f172a;
+            --card-bg: #1e293b;
+            --card-header-bg: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+            --table-hover-bg: rgba(56, 189, 248, 0.07);
+            --accent-color: #38bdf8;
+            --accent-hover: #0ea5e9;
+            --nav-bg: #0f172a;
+            --glass-blur: none;
+            --glass-bg: #1e293b;
+            --card-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            --card-hover-shadow: 0 12px 20px rgba(0, 0, 0, 0.3);
+            --input-bg: #0f172a;
+            --input-border: #475569;
+            --input-text: #f1f5f9;
+            --dropdown-bg: #1e293b;
+            --dropdown-item-hover: #334155;
+            --badge-bg: #334155;
+        }
+
+        [data-theme="glass"] {
+            /* Midnight Glass Theme */
+            --bg-primary: #020617;
+            --card-bg: rgba(15, 23, 42, 0.65);
+            --card-header-bg: rgba(15, 23, 42, 0.7);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --table-hover-bg: rgba(167, 139, 250, 0.12);
+            --accent-color: #c084fc;
+            --accent-hover: #a855f7;
+            --nav-bg: rgba(15, 23, 42, 0.85);
+            --glass-blur: blur(12px);
+            --glass-bg: rgba(15, 23, 42, 0.65);
+            --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            --card-hover-shadow: 0 15px 35px rgba(167, 139, 250, 0.15);
+            --input-bg: rgba(2, 6, 23, 0.5);
+            --input-border: rgba(255, 255, 255, 0.1);
+            --input-text: #f8fafc;
+            --dropdown-bg: rgba(15, 23, 42, 0.95);
+            --dropdown-item-hover: rgba(167, 139, 250, 0.15);
+            --badge-bg: rgba(255, 255, 255, 0.08);
+            --close-btn-filter: invert(1);
         }
 
         body {
-            background-color: #eef2f5;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
             font-family: 'Inter', sans-serif;
+            transition: background-color 0.25s, color 0.25s;
         }
 
         .navbar {
             box-shadow: 0 2px 4px rgba(0,0,0,.08);
+            background-color: var(--nav-bg) !important;
+            transition: background-color 0.25s;
         }
 
         .card {
-            border: none;
+            background-color: var(--card-bg) !important;
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--border-color) !important;
             border-radius: .75rem;
-            box-shadow: 0 4px 6px rgba(0,0,0,.04);
+            box-shadow: var(--card-shadow);
             transition: all .2s ease-in-out;
+            color: var(--text-primary);
         }
         .card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 10px 15px rgba(0,0,0,.06);
+            box-shadow: var(--card-hover-shadow);
         }
 
         .card-header {
-            background-color: #fff;
-            border-bottom: 1px solid #e9ecef;
+            background-color: var(--card-header-bg) !important;
+            border-bottom: 1px solid var(--border-color) !important;
             font-weight: 600;
+            color: var(--text-primary);
         }
 
-        .table-hover tbody tr:hover {
-            background-color: rgba(var(--bs-primary-rgb), 0.05);
+        .table {
+            color: var(--text-primary) !important;
+        }
+        .table th, .table td {
+            border-color: var(--border-color) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .table-hover tbody tr:hover td {
+            background-color: var(--table-hover-bg) !important;
+        }
+
+        .form-control, .form-select {
+            background-color: var(--input-bg) !important;
+            border-color: var(--input-border) !important;
+            color: var(--input-text) !important;
+        }
+        .form-control:focus, .form-select:focus {
+            background-color: var(--input-bg) !important;
+            color: var(--input-text) !important;
+        }
+
+        .dropdown-menu {
+            background-color: var(--dropdown-bg) !important;
+            border-color: var(--border-color) !important;
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+        }
+        .dropdown-item {
+            color: var(--text-primary) !important;
+        }
+        .dropdown-item:hover {
+            background-color: var(--dropdown-item-hover) !important;
+        }
+
+        .modal-content {
+            background-color: var(--card-bg) !important;
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--border-color) !important;
+            color: var(--text-primary) !important;
+        }
+        .modal-header, .modal-footer {
+            border-color: var(--border-color) !important;
+            background-color: var(--card-header-bg) !important;
+        }
+        .btn-close {
+            filter: var(--close-btn-filter) !important;
+        }
+        .modal .bg-light, .modal-body .bg-light {
+            background-color: var(--bg-primary) !important;
+            color: var(--text-secondary) !important;
+        }
+        .modal-body .list-group-item {
+            background-color: var(--card-bg) !important;
+            border-color: var(--border-color) !important;
+            color: var(--text-primary) !important;
+        }
+        .text-dark {
+            color: var(--text-primary) !important;
+        }
+        .text-muted {
+            color: var(--text-secondary) !important;
+        }
+        .bg-white, .bg-light {
+            background-color: var(--card-bg) !important;
+            color: var(--text-primary) !important;
+            border-color: var(--border-color) !important;
+        }
+        
+        /* Global Table Contrast & Color Theming */
+        .table {
+            color: var(--text-primary) !important;
+            border-color: var(--border-color) !important;
+        }
+        .table th, .table td {
+            background-color: transparent !important;
+            color: var(--text-primary) !important;
+            border-color: var(--border-color) !important;
+        }
+        .table thead, .table-light {
+            background-color: var(--bg-secondary) !important;
+            border-color: var(--border-color) !important;
+        }
+        .table thead th {
+            color: var(--text-secondary) !important;
+        }
+        .table-hover tbody tr:hover td {
+            background-color: var(--table-hover-bg) !important;
+            color: var(--text-primary) !important;
+        }
+        caption {
+            color: var(--text-secondary) !important;
         }
 
         .btn-primary {
@@ -55,7 +228,7 @@
             transition: 0.5s;
             background-size: 200% auto;
             color: white;            
-            box-shadow: 0 0 20px #eee;
+            box-shadow: 0 0 20px rgba(0,0,0,0.05);
         }
 
         .btn-primary:hover {
@@ -191,17 +364,18 @@
 
         /* Modern Search Component */
         .modern-search-card {
-            background: #ffffff;
+            background: var(--card-bg) !important;
             border-radius: 1.25rem;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-            border: 1px solid rgba(0,0,0,0.05);
+            box-shadow: var(--card-shadow);
+            border: 1px solid var(--border-color) !important;
             padding: 1.5rem;
             transition: all 0.3s ease;
+            color: var(--text-primary) !important;
         }
 
         .modern-search-card:focus-within {
-            box-shadow: 0 15px 40px rgba(68, 157, 255, 0.15);
-            border-color: rgba(68, 157, 255, 0.3);
+            box-shadow: var(--card-hover-shadow);
+            border-color: var(--accent-color) !important;
         }
 
         .search-input-wrapper {
@@ -213,7 +387,7 @@
             left: 1.2rem;
             top: 50%;
             transform: translateY(-50%);
-            color: #449dff;
+            color: var(--accent-color);
             font-size: 1.2rem;
             pointer-events: none;
         }
@@ -222,32 +396,33 @@
             padding: 1rem 1rem 1rem 3rem !important;
             font-size: 1.1rem;
             border-radius: 1rem;
-            background-color: #f8f9fa;
-            border: 2px solid transparent;
+            background-color: var(--input-bg) !important;
+            color: var(--input-text) !important;
+            border: 2px solid var(--input-border) !important;
             transition: all 0.3s ease;
             font-weight: 500;
         }
 
         .modern-search-input:focus {
-            background-color: #ffffff;
-            border-color: #449dff;
+            background-color: var(--input-bg) !important;
+            border-color: var(--accent-color) !important;
             box-shadow: 0 0 0 0.25rem rgba(68, 157, 255, 0.1);
         }
 
         .modern-filter-select {
             border-radius: 0.75rem;
-            border: 1px solid #e9ecef;
+            border: 1px solid var(--input-border) !important;
             padding: 0.7rem 1rem;
-            background-color: #fff;
+            background-color: var(--input-bg) !important;
             font-weight: 500;
-            color: #495057;
+            color: var(--input-text) !important;
             cursor: pointer;
             transition: all 0.2s ease;
             height: 100%;
         }
         
         .modern-filter-select:focus {
-            border-color: #3478c6;
+            border-color: var(--accent-color) !important;
             box-shadow: 0 0 0 0.25rem rgba(52, 120, 198, 0.1);
         }
 
@@ -260,9 +435,10 @@
         }
 
         .modern-results-table {
-            background: #fff;
+            background: var(--card-bg) !important;
             border-radius: 1rem;
             overflow: hidden;
+            color: var(--text-primary) !important;
             box-shadow: 0 4px 15px rgba(0,0,0,0.03);
             border: 1px solid #f1f3f4;
             margin-top: 1rem;
@@ -272,28 +448,28 @@
         }
         
         .modern-results-table thead {
-            background: #f8f9fa;
+            background: var(--bg-secondary) !important;
         }
         
         .modern-results-table th {
             font-weight: 600;
-            color: #6c757d;
+            color: var(--text-secondary) !important;
             text-transform: uppercase;
             font-size: 0.8rem;
             letter-spacing: 0.5px;
             padding: 1rem;
-            border-bottom: 2px solid #e9ecef;
+            border-bottom: 2px solid var(--border-color) !important;
         }
         
         .modern-results-table td {
             vertical-align: middle;
             padding: 1rem;
-            border-bottom: 1px solid #f1f3f4;
+            border-bottom: 1px solid var(--border-color) !important;
             transition: background 0.2s;
         }
         
         .modern-results-table tbody tr:hover td {
-            background-color: rgba(68, 157, 255, 0.05); /* very light blue */
+            background-color: var(--table-hover-bg) !important;
         }
         
         .modern-results-table tbody tr:last-child td {
@@ -302,8 +478,8 @@
         /* Option Chain Modern Dial */
         .oc-expiry-container {
             position: relative;
-            background: #f8f9fa;
-            border-bottom: 1px solid #dee2e6;
+            background: var(--bg-secondary) !important;
+            border-bottom: 1px solid var(--border-color) !important;
             padding: 0.5rem 0;
             overflow: hidden;
         }
@@ -316,8 +492,8 @@
             z-index: 2;
             pointer-events: none;
         }
-        .oc-expiry-container::before { left: 0; background: linear-gradient(to right, #f8f9fa, transparent); }
-        .oc-expiry-container::after { right: 0; background: linear-gradient(to left, #f8f9fa, transparent); }
+        .oc-expiry-container::before { left: 0; background: linear-gradient(to right, var(--bg-secondary), transparent); }
+        .oc-expiry-container::after { right: 0; background: linear-gradient(to left, var(--bg-secondary), transparent); }
 
         .oc-expiry-dial {
             display: flex;
@@ -527,9 +703,71 @@
         #basketModal { z-index: 1060 !important; }
         .modal-backdrop { z-index: 1040 !important; }
 
+        /* Navigation Tabs Styling */
+        .nav-tabs {
+            border-bottom: 1px solid var(--border-color) !important;
+        }
+        .nav-tabs .nav-link {
+            border: none !important;
+            border-bottom: 2px solid transparent !important;
+            color: var(--text-secondary) !important;
+            transition: all 0.2s;
+            font-size: 0.85rem;
+            padding: 0.5rem 1rem;
+        }
+        .nav-tabs .nav-link.active {
+            border-bottom: 2px solid var(--accent-color) !important;
+            color: var(--accent-color) !important;
+            background: transparent !important;
+        }
+
+        /* Mobile Responsiveness media queries */
+        @media (max-width: 768px) {
+            .navbar-brand {
+                font-size: 1.1rem;
+            }
+            .modern-search-card {
+                padding: 1rem;
+            }
+            /* Make Option Chain touch friendly and compact on mobile */
+            .oc-expiry-item {
+                width: 75px !important;
+                height: 75px !important;
+                border-radius: 12px !important;
+            }
+            .oc-expiry-item .day {
+                font-size: 1.1rem !important;
+            }
+            .oc-expiry-item .month {
+                font-size: 0.6rem !important;
+            }
+            .oc-table td {
+                padding: 8px 4px !important;
+                font-size: 0.8rem !important;
+            }
+            .oc-select-btn {
+                width: 26px !important;
+                height: 26px !important;
+            }
+            .oc-action-icons {
+                gap: 0.15rem !important;
+            }
+            #oc-underlying-desc {
+                display: none !important;
+            }
+            #diagnostics-dropdown-container {
+                margin-right: 0.5rem !important;
+            }
+        }
     </style>
 </head>
 <body>
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('app-theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        })();
+    </script>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
         <div class="container-fluid">
             <a class="navbar-brand fw-bold" href="/">
@@ -543,13 +781,50 @@
                     {% endif %}
                 </span>
                 <span class="vr me-3"></span>
-                <span class="navbar-text">
-                     {% if is_connected %}
-                        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle"><i class="bi bi-check-circle-fill me-1"></i> API Connected</span>
-                    {% else %}
-                        <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle"><i class="bi bi-x-circle-fill me-1"></i> API Disconnected</span>
-                    {% endif %}
-                </span>
+                <!-- System Diagnostics Dropdown -->
+                <div class="dropdown me-3" id="diagnostics-dropdown-container">
+                    <button class="btn btn-sm dropdown-toggle d-flex align-items-center gap-1 border bg-dark text-white" id="diagnostics-btn" data-bs-toggle="dropdown" aria-expanded="false" style="border-radius: 20px; font-weight: 600; padding: 4px 12px; transition: all 0.2s;">
+                        <span class="pulse-dot" id="diag-pulse-dot" style="background-color: #ffc107;"></span>
+                        <span id="diag-summary-text">API Checking...</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end p-3 shadow-lg border" aria-labelledby="diagnostics-btn" style="min-width: 280px; font-size: 0.85rem; border-radius: 12px;">
+                        <li class="mb-2 border-bottom pb-2">
+                            <div class="fw-bold text-uppercase text-muted small mb-1">System Diagnostics</div>
+                        </li>
+                        <li class="mb-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">WebSocket Feed:</span>
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis" id="diag-ws-status">Connecting...</span>
+                            </div>
+                        </li>
+                        <li class="mb-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Neo SDK Session:</span>
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis" id="diag-sdk-status">Checking...</span>
+                            </div>
+                        </li>
+                        <li class="mb-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Ping Latency:</span>
+                                <span class="fw-bold text-success" id="diag-latency">-- ms</span>
+                            </div>
+                        </li>
+                        <li class="mb-2 border-top pt-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">SDK Session Expiry:</span>
+                                <span class="fw-bold text-danger" id="diag-sdk-expiry">--:--</span>
+                            </div>
+                        </li>
+                        <li class="mt-2 pt-2 border-top d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-primary w-100 py-1" onclick="extendSDKSessionQuick()" style="font-size: 0.75rem; border-radius: 6px;">
+                                <i class="bi bi-arrow-repeat me-1"></i> Extend SDK
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary w-100 py-1" onclick="checkDiagnostics()" style="font-size: 0.75rem; border-radius: 6px;">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                        </li>
+                    </ul>
+                </div>
                 <button class="btn btn-sm btn-warning ms-3 fw-bold shadow-sm" id="resume-feed-nav-btn" style="display: none;">
                     <i class="bi bi-play-circle me-1"></i>Resume Live Feed
                 </button>
@@ -558,6 +833,11 @@
                 </button>
                 <div class="collapse navbar-collapse" id="navbarSupportedContent">
                     <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-center">
+                        <li class="nav-item me-2">
+                            <button class="btn btn-dark p-2" id="theme-toggle-btn" title="Cycle Theme" onclick="cycleTheme()">
+                                <i class="bi bi-sun-fill fs-5" id="theme-toggle-icon"></i>
+                            </button>
+                        </li>
                         <li class="nav-item me-2">
                             <button class="btn btn-dark position-relative p-2" id="basket-nav-btn" title="Basket Orders">
                                 <i class="bi bi-cart3 fs-5"></i>
@@ -830,40 +1110,83 @@
 
         <!-- Modern Search Data Card -->
         <div class="modern-search-card mb-4 mt-2">
-            <div class="d-flex align-items-center justify-content-between mb-4">
+            <div class="d-flex align-items-center justify-content-between mb-3">
                 <h2 class="h5 mb-0 fw-bold text-dark"><i class="bi bi-rocket-takeoff text-primary me-2"></i> Quick Search & Trade</h2>
                 <span class="badge bg-primary-subtle text-primary-emphasis px-3 py-2 rounded-pill"><i class="bi bi-lightning-charge-fill me-1"></i> Live Data Active</span>
             </div>
-            
-            <div class="row g-3 align-items-stretch mb-3">
-                <div class="col-lg-6 position-relative">
-                    <div class="search-input-wrapper h-100">
-                        <i class="bi bi-search"></i>
-                        <input type="text" class="form-control modern-search-input h-100" id="scrip_search" placeholder="e.g., SENSEX 14 MAY 2026 65100 CALL, TCS, Nifty 25JUN26">
-                    </div>
-                    <div id="scrip-results-dropdown" class="dropdown-menu w-100 shadow-lg border-0 rounded-3 mt-1" style="max-height: 300px; overflow-y: auto;"></div>
-                </div>
-                <div class="col-md-4 col-lg-2">
-                    <select id="scrip_exchange" class="form-select modern-filter-select w-100">
-                        <option value="all" selected>All Exchanges</option>
-                        <option value="nse_cm">NSE Stocks</option>
-                        <option value="bse_cm">BSE Stocks</option>
-                        <option value="nse_fo">NSE F&O</option>
-                        <option value="bse_fo">BSE F&O</option>
-                    </select>
-                </div>
-                <div class="col-md-4 col-lg-2">
-                    <select id="scrip_inst_type" class="form-select modern-filter-select w-100">
-                        <option value="all" selected>All Types</option>
-                        <option value="stock">Stocks</option>
-                        <option value="option">Options</option>
-                        <option value="future">Futures</option>
-                    </select>
-                </div>
-                <div class="col-md-4 col-lg-2">
-                    <button type="button" id="scrip-search-btn" class="btn btn-primary search-action-btn w-100">
-                        Search <i class="bi bi-arrow-right ms-1"></i>
+
+            <!-- Tabs Navigation -->
+            <ul class="nav nav-tabs border-bottom mb-3" id="search-tabs" role="tablist" style="border-width: 2px;">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active fw-bold text-uppercase py-2 px-3 border-0" id="tab-scrip-search" data-bs-toggle="tab" data-bs-target="#panel-scrip-search" type="button" role="tab" style="font-size: 0.8rem; background: transparent; color: var(--text-primary);">
+                        <i class="bi bi-search me-1"></i> Search Scrip
                     </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-bold text-uppercase py-2 px-3 border-0" id="tab-option-chain" data-bs-toggle="tab" data-bs-target="#panel-option-chain" type="button" role="tab" style="font-size: 0.8rem; background: transparent; color: var(--text-primary);">
+                        <i class="bi bi-layers-half me-1"></i> Option Chain Quick-Access
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="search-tabs-content">
+                <!-- Panel 1: Search Scrip -->
+                <div class="tab-pane fade show active" id="panel-scrip-search" role="tabpanel" aria-labelledby="tab-scrip-search">
+                    <div class="row g-3 align-items-stretch mb-3">
+                        <div class="col-lg-6 position-relative">
+                            <div class="search-input-wrapper h-100">
+                                <i class="bi bi-search"></i>
+                                <input type="text" class="form-control modern-search-input h-100" id="scrip_search" placeholder="e.g., SENSEX 14 MAY 2026 65100 CALL, TCS, Nifty 25JUN26">
+                            </div>
+                            <div id="scrip-results-dropdown" class="dropdown-menu w-100 shadow-lg border-0 rounded-3 mt-1" style="max-height: 300px; overflow-y: auto;"></div>
+                        </div>
+                        <div class="col-md-4 col-lg-2">
+                            <select id="scrip_exchange" class="form-select modern-filter-select w-100">
+                                <option value="all" selected>All Exchanges</option>
+                                <option value="nse_cm">NSE Stocks</option>
+                                <option value="bse_cm">BSE Stocks</option>
+                                <option value="nse_fo">NSE F&O</option>
+                                <option value="bse_fo">BSE F&O</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 col-lg-2">
+                            <select id="scrip_inst_type" class="form-select modern-filter-select w-100">
+                                <option value="all" selected>All Types</option>
+                                <option value="stock">Stocks</option>
+                                <option value="option">Options</option>
+                                <option value="future">Futures</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 col-lg-2">
+                            <button type="button" id="scrip-search-btn" class="btn btn-primary search-action-btn w-100">
+                                Search <i class="bi bi-arrow-right ms-1"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel 2: Option Chain Quick-Access -->
+                <div class="tab-pane fade" id="panel-option-chain" role="tabpanel" aria-labelledby="tab-option-chain">
+                    <div class="row g-3 align-items-center py-2">
+                        <div class="col-lg-7 col-md-12">
+                            <div class="d-flex flex-wrap gap-2 align-items-center">
+                                <span class="text-muted small fw-bold text-uppercase me-2"><i class="bi bi-fire text-warning me-1"></i>Indices:</span>
+                                <button type="button" class="btn btn-outline-primary btn-sm fw-bold px-3 py-2 rounded-3" onclick="launchDirectOC('Nifty 50', 'nse_cm')">NIFTY 50</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm fw-bold px-3 py-2 rounded-3" onclick="launchDirectOC('Nifty Bank', 'nse_cm')">BANK NIFTY</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm fw-bold px-3 py-2 rounded-3" onclick="launchDirectOC('Nifty Fin Services', 'nse_cm')">FIN NIFTY</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm fw-bold px-3 py-2 rounded-3" onclick="launchDirectOC('SENSEX', 'bse_cm')">SENSEX</button>
+                            </div>
+                        </div>
+                        <div class="col-lg-5 col-md-12">
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                                <input type="text" class="form-control border-start-0 ps-0" id="oc-custom-symbol" placeholder="Search Custom Ticker (e.g. TCS, RELIANCE)...">
+                                <button class="btn btn-primary fw-bold" type="button" onclick="launchCustomOC()">
+                                    View Chain <i class="bi bi-chevron-right ms-1"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
@@ -1503,6 +1826,36 @@
     </div>
     
     <script>
+        // Theme Engine Configuration
+        const themes = ['light', 'dark', 'glass'];
+        const themeIcons = {
+            'light': 'bi-sun-fill',
+            'dark': 'bi-moon-fill',
+            'glass': 'bi-sparkles'
+        };
+
+        window.applyTheme = function(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('app-theme', theme);
+            const iconEl = document.getElementById('theme-toggle-icon');
+            if (iconEl) {
+                iconEl.className = 'bi ' + themeIcons[theme] + ' fs-5';
+            }
+        };
+
+        window.cycleTheme = function() {
+            let currentTheme = localStorage.getItem('app-theme') || 'light';
+            let nextIndex = (themes.indexOf(currentTheme) + 1) % themes.length;
+            let nextTheme = themes[nextIndex];
+            window.applyTheme(nextTheme);
+        };
+
+        // Initialize Theme Icons on Page Load
+        document.addEventListener('DOMContentLoaded', () => {
+            const currentTheme = localStorage.getItem('app-theme') || 'light';
+            window.applyTheme(currentTheme);
+        });
+
         // Use data attributes to avoid IDE parsing errors with template variables in JS
         const settingsData = document.getElementById('platform-settings-data').dataset;
         window.PLATFORM_SETTINGS = {
@@ -3224,15 +3577,9 @@
                 });
             }
 
-            document.getElementById('modal-option-chain-btn').addEventListener('click', function() {
-                const symbol = document.getElementById('modal-data').dataset.pSymbol;
-                const name = document.getElementById('modal-data').dataset.displayName;
-                const desc = document.getElementById('modal-data').dataset.pDesc;
-                const exch = document.getElementById('modal-data').dataset.pExchSeg;
-                const isIndex = document.getElementById('modal-data').dataset.isIndex === 'true';
-                
+            window.openOptionChain = function(symbol, name, desc, exch, isIndex) {
                 document.getElementById('oc-symbol-name').textContent = name;
-                document.getElementById('oc-underlying-desc').textContent = desc;
+                document.getElementById('oc-underlying-desc').textContent = desc || '';
                 
                 currentOCUnderlyingSymbol = symbol;
                 currentOCUnderlyingExch = exch;
@@ -3247,7 +3594,7 @@
                 const actionModal = bootstrap.Modal.getInstance(document.getElementById('scripActionModal'));
                 if (actionModal) actionModal.hide();
                 
-                const ocModal = new bootstrap.Modal(ocModalEl);
+                const ocModal = bootstrap.Modal.getInstance(ocModalEl) || new bootstrap.Modal(ocModalEl);
                 ocModal.show();
                 
                 // Fetch chain data
@@ -3294,6 +3641,54 @@
                             }));
                         }
                     });
+            };
+
+            window.openOptionChainFromScrip = function(scrip) {
+                const displayName = scrip.pTrdSymbol || scrip.pSymbolName;
+                const isIndex = scrip.pInstType === 'OPTIDX' || scrip.pInstType === 'FUTIDX';
+                window.openOptionChain(scrip.pSymbol, displayName, scrip.pDesc, scrip.pExchSeg, isIndex);
+            };
+
+            window.launchDirectOC = function(searchName, exch) {
+                showNotification(`Locating Option Chain for ${searchName}...`, 'info');
+                fetch(`/search_scrip_cache/?q=${encodeURIComponent(searchName)}&exchange=${encodeURIComponent(exch)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.results && data.results.length > 0) {
+                            // Find a result that has option chain
+                            const match = data.results.find(item => item.has_option_chain) || data.results[0];
+                            if (match) {
+                                window.openOptionChainFromScrip(match);
+                            } else {
+                                showNotification(`No option chain found for ${searchName}.`, 'warning');
+                            }
+                        } else {
+                            showNotification(`Underlying ${searchName} not found in master data.`, 'warning');
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Error launching option chain:', err);
+                        showNotification('Failed to launch option chain.', 'danger');
+                    });
+            };
+
+            window.launchCustomOC = function() {
+                const symbolInput = document.getElementById('oc-custom-symbol').value.trim();
+                if (!symbolInput) {
+                    showNotification('Please enter an underlying symbol (e.g., RELIANCE, TCS).', 'warning');
+                    return;
+                }
+                window.launchDirectOC(symbolInput, 'all');
+            };
+
+            document.getElementById('modal-option-chain-btn').addEventListener('click', function() {
+                const symbol = document.getElementById('modal-data').dataset.pSymbol;
+                const name = document.getElementById('modal-data').dataset.displayName;
+                const desc = document.getElementById('modal-data').dataset.pDesc;
+                const exch = document.getElementById('modal-data').dataset.pExchSeg;
+                const isIndex = document.getElementById('modal-data').dataset.isIndex === 'true';
+                
+                window.openOptionChain(symbol, name, desc, exch, isIndex);
             });
 
             function renderExpiryDial() {
@@ -5451,19 +5846,19 @@
             const timeRemainingMs = sdkExpiresAt - now;
             const timeRemainingSecs = Math.floor(timeRemainingMs / 1000);
             
+            // Format countdown text
+            const mins = Math.floor(timeRemainingSecs / 60);
+            const secs = timeRemainingSecs % 60;
+            const text = `${mins}:${secs.toString().padStart(2, '0')}`;
+
             if (timeRemainingSecs <= 180 && timeRemainingSecs > 0) { // 3 minutes warning
                 if (!sdkWarningShown) {
                     sdkWarningShown = true;
                     const modal = new bootstrap.Modal(document.getElementById('sdkExtensionModal'));
                     modal.show();
                 }
-                // Update countdown text
-                const mins = Math.floor(timeRemainingSecs / 60);
-                const secs = timeRemainingSecs % 60;
-                const text = `${mins}:${secs.toString().padStart(2, '0')}`;
                 const counterEl = document.getElementById('sdk-expire-countdown');
                 if (counterEl) counterEl.textContent = text;
-                
             } else if (timeRemainingSecs <= 0) {
                 // Already expired
                 clearInterval(sdkExtensionTimer);
@@ -5471,6 +5866,18 @@
                 if (modalEl) {
                     const modalInstance = bootstrap.Modal.getInstance(modalEl);
                     if (modalInstance) modalInstance.hide();
+                }
+            }
+
+            // Sync with Diagnostics Expiry HUD
+            const diagCounterEl = document.getElementById('diag-sdk-expiry');
+            if (diagCounterEl) {
+                if (timeRemainingSecs > 0) {
+                    diagCounterEl.textContent = text;
+                    diagCounterEl.className = timeRemainingSecs <= 180 ? 'fw-bold text-danger' : 'fw-bold text-success';
+                } else {
+                    diagCounterEl.textContent = 'Expired';
+                    diagCounterEl.className = 'fw-bold text-danger';
                 }
             }
         }
@@ -5519,6 +5926,107 @@
                 });
             });
         }
+
+        // System Diagnostics Functions
+        function updateDiagSummary(isSdkAuth) {
+            const dot = document.getElementById('diag-pulse-dot');
+            const text = document.getElementById('diag-summary-text');
+            const btn = document.getElementById('diagnostics-btn');
+            if (!dot || !text || !btn) return;
+            
+            let wsActive = typeof tradeSocket !== 'undefined' && tradeSocket && tradeSocket.readyState === WebSocket.OPEN;
+            
+            if (isSdkAuth && wsActive) {
+                dot.style.backgroundColor = '#198754'; // success green
+                text.textContent = 'API Connected';
+                btn.className = 'btn btn-sm dropdown-toggle d-flex align-items-center gap-1 border border-success text-success bg-transparent';
+            } else if (isSdkAuth) {
+                dot.style.backgroundColor = '#ffc107'; // warning yellow
+                text.textContent = 'No Live Feed';
+                btn.className = 'btn btn-sm dropdown-toggle d-flex align-items-center gap-1 border border-warning text-warning bg-transparent';
+            } else {
+                dot.style.backgroundColor = '#dc3545'; // danger red
+                text.textContent = 'SDK Inactive';
+                btn.className = 'btn btn-sm dropdown-toggle d-flex align-items-center gap-1 border border-danger text-danger bg-transparent';
+            }
+        }
+
+        window.checkDiagnostics = function() {
+            // Check WebSocket status
+            const wsStatusEl = document.getElementById('diag-ws-status');
+            if (wsStatusEl) {
+                if (typeof tradeSocket === 'undefined' || !tradeSocket) {
+                    wsStatusEl.textContent = 'Disconnected';
+                    wsStatusEl.className = 'badge bg-danger-subtle text-danger-emphasis border border-danger-subtle';
+                } else {
+                    switch (tradeSocket.readyState) {
+                        case WebSocket.CONNECTING:
+                            wsStatusEl.textContent = 'Connecting...';
+                            wsStatusEl.className = 'badge bg-warning-subtle text-warning-emphasis border border-warning-subtle';
+                            break;
+                        case WebSocket.OPEN:
+                            wsStatusEl.textContent = 'Live Feed Active';
+                            wsStatusEl.className = 'badge bg-success-subtle text-success-emphasis border border-success-subtle';
+                            break;
+                        case WebSocket.CLOSING:
+                            wsStatusEl.textContent = 'Closing...';
+                            wsStatusEl.className = 'badge bg-warning-subtle text-warning-emphasis border border-warning-subtle';
+                            break;
+                        case WebSocket.CLOSED:
+                            wsStatusEl.textContent = 'Closed';
+                            wsStatusEl.className = 'badge bg-danger-subtle text-danger-emphasis border border-danger-subtle';
+                            break;
+                    }
+                }
+            }
+
+            // Check SDK Status with latency measure
+            const startTime = performance.now();
+            fetch('/check_sdk_status/')
+                .then(res => res.json())
+                .then(data => {
+                    const endTime = performance.now();
+                    const latency = Math.round(endTime - startTime);
+                    
+                    const latencyEl = document.getElementById('diag-latency');
+                    if (latencyEl) {
+                        latencyEl.textContent = `${latency} ms`;
+                        if (latency < 150) latencyEl.className = 'fw-bold text-success';
+                        else if (latency < 400) latencyEl.className = 'fw-bold text-warning';
+                        else latencyEl.className = 'fw-bold text-danger';
+                    }
+                    
+                    const sdkStatusEl = document.getElementById('diag-sdk-status');
+                    const isAuth = data.status === 'success' && data.is_authenticated;
+                    if (sdkStatusEl) {
+                        sdkStatusEl.textContent = isAuth ? 'Active' : 'Inactive';
+                        sdkStatusEl.className = isAuth ? 'badge bg-success-subtle text-success-emphasis border border-success-subtle' : 'badge bg-danger-subtle text-danger-emphasis border border-danger-subtle';
+                    }
+                    
+                    updateDiagSummary(isAuth);
+                })
+                .catch(err => {
+                    console.error('Diagnostics ping failed:', err);
+                    const sdkStatusEl = document.getElementById('diag-sdk-status');
+                    if (sdkStatusEl) {
+                        sdkStatusEl.textContent = 'Error';
+                        sdkStatusEl.className = 'badge bg-danger-subtle text-danger-emphasis border border-danger-subtle';
+                    }
+                    updateDiagSummary(false);
+                });
+        };
+
+        window.extendSDKSessionQuick = function() {
+            const btn = document.getElementById('extend-sdk-session-btn');
+            if (btn) {
+                btn.click();
+                setTimeout(window.checkDiagnostics, 1500);
+            }
+        };
+
+        // Run diagnostics check initially and periodically every 5 seconds
+        setTimeout(window.checkDiagnostics, 1200);
+        setInterval(window.checkDiagnostics, 5000);
     </script>
 
     <!-- Session Restored Modal -->
