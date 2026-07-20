@@ -2371,7 +2371,8 @@
                     return;
                 }
 
-                tradeSocket = new WebSocket(`ws://${window.location.host}/ws/trades/`);
+                const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+                tradeSocket = new WebSocket(`${wsProtocol}://${window.location.host}/ws/trades/`);
                 
                 // Global Modal Backdrop Cleanup - ensures backdrops are removed when all modals are closed
                 document.addEventListener('hidden.bs.modal', function () {
@@ -2656,7 +2657,7 @@
             document.getElementById('refresh-scrips').addEventListener('click', function(e) {
                 e.preventDefault();
                 showNotification('Starting scrip master download... This may take a moment.', 'info');
-                fetch('/refresh_scrip_master/')
+                fetch('/refresh_scrip_master/?force=true')
                     .then(response => response.json())
                     .then(data => {
                         if (data.status === 'success') {
@@ -2674,7 +2675,7 @@
             document.getElementById('refresh-scrip-cache').addEventListener('click', function(e) {
                 e.preventDefault();
                 showNotification('Refreshing scrip cache... This may take a moment.', 'info');
-                fetch('/refresh_scrip_cache/')
+                fetch('/refresh_scrip_cache/?force=true')
                     .then(response => response.json())
                     .then(data => {
                         if (data.status === 'success') {

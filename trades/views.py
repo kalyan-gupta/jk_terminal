@@ -1003,11 +1003,13 @@ def check_scrip_status(request):
 
 @login_required_with_session_check
 def refresh_scrip_master(request):
+    force = request.GET.get('force', 'false').lower() == 'true'
     with _scrip_refresh_lock:
-        # Double check if refresh is still needed (could have been completed by another concurrent request)
-        status = _check_scrip_status_logic()
-        if not status.get('needs_refresh') or status.get('reason') == 'Cache empty':
-            return JsonResponse({'status': 'success', 'message': 'Scrip master files are already up-to-date.'})
+        if not force:
+            # Double check if refresh is still needed (could have been completed by another concurrent request)
+            status = _check_scrip_status_logic()
+            if not status.get('needs_refresh') or status.get('reason') == 'Cache empty':
+                return JsonResponse({'status': 'success', 'message': 'Scrip master files are already up-to-date.'})
 
         try:
             api = KotakNeoAPI(user=request.user, session_id=request.session.session_key)
@@ -1029,11 +1031,18 @@ def refresh_scrip_cache(request):
     if request.method != 'GET':
         return JsonResponse({'status': 'error', 'message': 'Only GET requests are allowed.'}, status=405)
 
+    force = request.GET.get('force', 'false').lower() == 'true'
     with _scrip_refresh_lock:
-        # Double check if cache update is still needed
-        status = _check_scrip_status_logic()
-        if not status.get('needs_refresh'):
-            return JsonResponse({'status': 'success', 'message': 'Scrip cache is already up-to-date.'})
+        if not force:
+            # Double check if cache update is still needed
+            status = _check_scrip_status_logic()
+            if not status.get('needs_refresh'):
+                try:
+                    with _duckdb_lock:
+                        current_rows = _duckdb_connection.execute('SELECT COUNT(*) FROM active_market_data').fetchone()[0]
+                except Exception:
+                    current_rows = 0
+                return JsonResponse({'status': 'success', 'message': 'Scrip cache is already up-to-date.', 'row_count': current_rows})
 
         success, message, row_count = _perform_scrip_cache_refresh()
         if success:

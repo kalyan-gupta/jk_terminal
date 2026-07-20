@@ -476,7 +476,7 @@ class KotakNeoAPI:
         if 'filesPaths' not in scrip_master_data:
             return {"error": "No file paths found in scrip master data."}
 
-        base_dir = os.path.join('trades', 'scrip_data')
+        base_dir = os.path.join(settings.BASE_DIR, 'trades', 'scrip_data')
         os.makedirs(base_dir, exist_ok=True)
 
         downloaded_files = []

@@ -150,9 +150,21 @@ SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_AGE = 300  # 5 minutes in seconds
 SESSION_SAVE_EVERY_REQUEST = True  # Reset timer on every request
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
+# HTTPS and SSL Proxy Configuration (configured via USE_HTTPS env var)
+USE_HTTPS = os.getenv('USE_HTTPS', 'False') == 'True'
+
+SESSION_COOKIE_SECURE = USE_HTTPS  # Secure cookie transmissions over HTTPS
 SESSION_COOKIE_HTTPONLY = True
-CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
+CSRF_COOKIE_SECURE = USE_HTTPS  # Secure CSRF token transmissions over HTTPS
+
+if USE_HTTPS:
+    # Tells Django the request was HTTPS when forwarded by Nginx
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Trusted origins for CSRF validation over HTTPS
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip() for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if origin.strip()
+]
 
 # Login URL
 LOGIN_URL = 'login'
