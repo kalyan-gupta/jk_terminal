@@ -76,23 +76,29 @@ def get_basket_ajax(request):
     basket_data = []
     
     if orders.exists():
-        # Get metadata for all tokens in basket from DuckDB shared memory connection
-        from .views import _duckdb_connection, _duckdb_lock
+        # Get metadata for all tokens in basket from SQLite scrip cache
+        from django.db import connections
         tokens = [o.instrument_token for o in orders]
         placeholders = ", ".join(["?" for _ in tokens])
         
         try:
-            with _duckdb_lock:
-                # Fetch lot_size, tick_size, pDesc etc.
-                metadata = _duckdb_connection.execute(f"""
-                    SELECT CAST(pSymbol AS VARCHAR) as pSymbol, pSymbolName, pTrdSymbol, pInstType, pDesc, 
-                    CAST(COALESCE(dTickSize, 0) AS DECIMAL) / 100 as dTickSize, lLotSize, pScripRefKey, pOptionType,
-                    CAST(COALESCE("dStrikePrice;", 0) AS DECIMAL) / 100 as dStrikePrice
+            connection = connections['scrip_cache']
+            with connection.cursor() as cursor:
+                cursor.execute(f"""
+                    SELECT CAST(pSymbol AS TEXT) as pSymbol, pSymbolName, pTrdSymbol, pInstType, pDesc, 
+                    CAST(COALESCE(dTickSize, 0) AS REAL) / 100 as dTickSize, lLotSize, pScripRefKey, pOptionType,
+                    CAST(COALESCE(dStrikePrice, 0) AS REAL) / 100 as dStrikePrice
                     FROM active_market_data 
-                    WHERE CAST(pSymbol AS VARCHAR) IN ({placeholders})
-                """, tokens).df().set_index('pSymbol').to_dict('index')
+                    WHERE CAST(pSymbol AS TEXT) IN ({placeholders})
+                """, tokens)
+                columns = [col[0] for col in cursor.description]
+                metadata = {}
+                for row in cursor.fetchall():
+                    row_dict = dict(zip(columns, row))
+                    pSymbol = row_dict.pop('pSymbol')
+                    metadata[pSymbol] = row_dict
         except Exception as e:
-            logger.error(f"DuckDB error in get_basket: {e}")
+            logger.error(f"SQLite error in get_basket: {e}")
             metadata = {}
 
         # Fetch real-time circuit limits if SDK is active
@@ -354,22 +360,28 @@ def reorder_basket_ajax(request):
         return JsonResponse({'status': 'success', 'message': 'Basket is empty.'})
 
     # Fetch metadata for sorting (expiry, strike, etc.)
-    from .views import _duckdb_connection, _duckdb_lock
+    from django.db import connections
     tokens = [o.instrument_token for o in orders]
     placeholders = ", ".join(["?" for _ in tokens])
     
     try:
-        with _duckdb_lock:
-            # Extract underlying from pScripRefKey or pSymbolName
-            metadata = _duckdb_connection.execute(f"""
-                SELECT CAST(pSymbol AS VARCHAR) as pSymbol, pScripRefKey, pSymbolName, pOptionType,
-                CAST(COALESCE("dStrikePrice;", 0) AS DECIMAL) / 100 as dStrikePrice,
-                try_strptime(regexp_extract(COALESCE(pScripRefKey, ''), '(\\d{{2}}[A-Z]{{3}}\\d{{2}})', 1), '%d%b%y') as expire_date
+        connection = connections['scrip_cache']
+        with connection.cursor() as cursor:
+            cursor.execute(f"""
+                SELECT CAST(pSymbol AS TEXT) as pSymbol, pScripRefKey, pSymbolName, pOptionType,
+                CAST(COALESCE(dStrikePrice, 0) AS REAL) / 100 as dStrikePrice,
+                expire_date
                 FROM active_market_data 
-                WHERE CAST(pSymbol AS VARCHAR) IN ({placeholders})
-            """, tokens).df().set_index('pSymbol').to_dict('index')
+                WHERE CAST(pSymbol AS TEXT) IN ({placeholders})
+            """, tokens)
+            columns = [col[0] for col in cursor.description]
+            metadata = {}
+            for row in cursor.fetchall():
+                row_dict = dict(zip(columns, row))
+                pSymbol = row_dict.pop('pSymbol')
+                metadata[pSymbol] = row_dict
     except Exception as e:
-        logger.error(f"DuckDB error in reorder_basket: {e}")
+        logger.error(f"SQLite error in reorder_basket: {e}")
         metadata = {}
 
     def sort_key(order):
@@ -384,7 +396,15 @@ def reorder_basket_ajax(request):
         
         # 2. Expiry date
         expiry = meta.get('expire_date')
-        expiry_val = expiry.to_pydatetime() if hasattr(expiry, 'to_pydatetime') else (expiry or "")
+        if isinstance(expiry, str) and len(expiry) == 10:
+            import datetime
+            try:
+                expiry_val = datetime.datetime.strptime(expiry, "%Y-%m-%d").date()
+            except Exception:
+                expiry_val = datetime.date.max
+        else:
+            import datetime
+            expiry_val = datetime.date.max
         
         # 3. Transaction type (Buy 'B' = 0, Sell 'S' = 1)
         side_priority = 0 if order.transaction_type == 'B' else 1

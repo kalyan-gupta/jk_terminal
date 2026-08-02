@@ -7,8 +7,6 @@ asgiref>=3.8.1
 # Environment and Configuration
 python-dotenv
 
-# Data and Caching
-duckdb>=1.0.0
 
 # Security and Networking
 requests

@@ -12,8 +12,8 @@ services:
     volumes:
       # Persist SQLite database
       - ./db.sqlite3:/app/db.sqlite3
-      # Persist DuckDB cache
-      - ./scrip_cache.duckdb:/app/scrip_cache.duckdb
+      # Persist SQLite cache
+      - ./scrip_cache.sqlite3:/app/scrip_cache.sqlite3
       # Persist logs
       - ./app_activity.log:/app/app_activity.log
       # Mount env file for production keys

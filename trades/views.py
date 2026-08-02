@@ -9,8 +9,11 @@ from .kotak_neo_api import KotakNeoAPI
 from .models import UserNeoCredentials, SessionActivity, SMTPSettings, UserSecurity, PlatformSettings
 from .forms import LoginForm, RegistrationForm, UserNeoCredentialsForm, UserProfileForm, TOTPForm, ForgotPasswordForm, SetNewPasswordForm, ChangePasswordForm, OTPVerifyForm
 from .decorators import login_required_with_session_check, ajax_login_required
+from django.db import connections
 import json
-import duckdb
+import csv
+import re
+import datetime
 import glob
 import os
 import threading
@@ -18,9 +21,6 @@ import logging
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
-
-_duckdb_connection = duckdb.connect(database=':memory:')
-_duckdb_lock = threading.RLock()
 
 def _quote_sql_string(value):
     return "'" + value.replace("'", "''") + "'"
@@ -117,59 +117,212 @@ def _get_scrip_data_files():
 
 
 def _perform_scrip_cache_refresh():
-    """Internal function to refresh scrip cache in DuckDB"""
+    """Internal function to refresh scrip cache in SQLite"""
     try:
         csv_files = _get_scrip_data_files()
         if not csv_files:
             logger.error("No scrip CSV files found for refresh.")
             return False, "No scrip CSV files found."
 
-        with _duckdb_lock:
-            # _duckdb_connection.execute('DROP VIEW IF EXISTS active_market_data')
-            _duckdb_connection.execute('DROP TABLE IF EXISTS active_market_data')
-            _duckdb_connection.execute('DROP TABLE IF EXISTS temp_market_data')
-            file_list_sql = ', '.join(_quote_sql_string(path) for path in csv_files)
-            _duckdb_connection.execute(
-                f"CREATE TABLE temp_market_data AS SELECT * FROM read_csv([{file_list_sql}], union_by_name=True)"
-            )
-            
-            _duckdb_connection.execute(r"""
-                CREATE TABLE active_market_data AS 
-                WITH option_underlyings AS (
-                    SELECT DISTINCT pAssetCode 
-                    FROM temp_market_data 
-                    WHERE pInstType IN ('OPTIDX', 'OPTSTK', 'IO', 'SO')
+        connection = connections['scrip_cache']
+        
+        # Pass 1: Collect Option Underlyings using a streaming csv reader
+        option_underlyings = set()
+        for csv_file in csv_files:
+            try:
+                with open(csv_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    reader = csv.reader(f)
+                    try:
+                        headers = next(reader)
+                    except StopIteration:
+                        continue
+                    
+                    headers_clean = [h.strip().rstrip(';') for h in headers]
+                    
+                    try:
+                        asset_code_idx = headers_clean.index('pAssetCode')
+                        inst_type_idx = headers_clean.index('pInstType')
+                    except ValueError:
+                        continue
+                    
+                    for row in reader:
+                        if len(row) > max(asset_code_idx, inst_type_idx):
+                            inst_type = row[inst_type_idx].strip()
+                            if inst_type in ('OPTIDX', 'OPTSTK', 'IO', 'SO'):
+                                asset_code = row[asset_code_idx].strip()
+                                if asset_code:
+                                    option_underlyings.add(asset_code)
+            except Exception as fe:
+                logger.error(f"Error in Pass 1 for file {csv_file}: {fe}")
+
+        # Pass 2: Stream, process and load into SQLite
+        with connection.cursor() as cursor:
+            cursor.execute("DROP TABLE IF EXISTS active_market_data")
+            cursor.execute("""
+                CREATE TABLE active_market_data (
+                    pSymbol TEXT,
+                    pExchSeg TEXT,
+                    pSymbolName TEXT,
+                    pTrdSymbol TEXT,
+                    pOptionType TEXT,
+                    pInstType TEXT,
+                    dStrikePrice REAL,
+                    pScripRefKey TEXT,
+                    pDesc TEXT,
+                    pGroup TEXT,
+                    pAssetCode TEXT,
+                    dTickSize REAL,
+                    lLotSize INTEGER,
+                    expire_date TEXT,
+                    has_option_chain INTEGER
                 )
-                SELECT t.*,
-                       try_strptime(regexp_extract(COALESCE(t.pScripRefKey, ''), '(\d{2}[A-Z]{3}\d{2})', 1), '%d%b%y') as expire_date,
-                       (ou.pAssetCode IS NOT NULL) as has_option_chain
-                FROM temp_market_data t
-                LEFT JOIN option_underlyings ou ON CAST(t.pSymbol AS VARCHAR) = CAST(ou.pAssetCode AS VARCHAR)
-                WHERE try_strptime(regexp_extract(COALESCE(t.pScripRefKey, ''), '(\d{2}[A-Z]{3}\d{2})', 1), '%d%b%y') IS NULL 
-                   OR try_strptime(regexp_extract(COALESCE(t.pScripRefKey, ''), '(\d{2}[A-Z]{3}\d{2})', 1), '%d%b%y') >= current_date()
             """)
+
+            date_pat = re.compile(r'(\d{2})([A-Z]{3})(\d{2})')
+            month_map = {
+                'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6,
+                'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12
+            }
             
-            _duckdb_connection.execute('DROP TABLE temp_market_data')
-            row_count = _duckdb_connection.execute('SELECT COUNT(*) FROM active_market_data').fetchone()[0]
-            logger.info(f"Refreshed active_market_data with {row_count} active scrips.")
+            today_str = datetime.date.today().strftime('%Y-%m-%d')
+            
+            insert_sql = """
+                INSERT INTO active_market_data (
+                    pSymbol, pExchSeg, pSymbolName, pTrdSymbol, pOptionType, pInstType,
+                    dStrikePrice, pScripRefKey, pDesc, pGroup, pAssetCode,
+                    dTickSize, lLotSize, expire_date, has_option_chain
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+
+            for csv_file in csv_files:
+                try:
+                    with open(csv_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        reader = csv.reader(f)
+                        try:
+                            headers = next(reader)
+                        except StopIteration:
+                            continue
+                        
+                        headers_clean = [h.strip().rstrip(';') for h in headers]
+                        
+                        indices = {
+                            'pSymbol': headers_clean.index('pSymbol') if 'pSymbol' in headers_clean else -1,
+                            'pExchSeg': headers_clean.index('pExchSeg') if 'pExchSeg' in headers_clean else -1,
+                            'pSymbolName': headers_clean.index('pSymbolName') if 'pSymbolName' in headers_clean else -1,
+                            'pTrdSymbol': headers_clean.index('pTrdSymbol') if 'pTrdSymbol' in headers_clean else -1,
+                            'pOptionType': headers_clean.index('pOptionType') if 'pOptionType' in headers_clean else -1,
+                            'pInstType': headers_clean.index('pInstType') if 'pInstType' in headers_clean else -1,
+                            'dStrikePrice': headers_clean.index('dStrikePrice') if 'dStrikePrice' in headers_clean else -1,
+                            'pScripRefKey': headers_clean.index('pScripRefKey') if 'pScripRefKey' in headers_clean else -1,
+                            'pDesc': headers_clean.index('pDesc') if 'pDesc' in headers_clean else -1,
+                            'pGroup': headers_clean.index('pGroup') if 'pGroup' in headers_clean else -1,
+                            'pAssetCode': headers_clean.index('pAssetCode') if 'pAssetCode' in headers_clean else -1,
+                            'dTickSize': headers_clean.index('dTickSize') if 'dTickSize' in headers_clean else -1,
+                            'lLotSize': headers_clean.index('lLotSize') if 'lLotSize' in headers_clean else -1,
+                        }
+                        
+                        batch = []
+                        for row in reader:
+                            row_len = len(row)
+                            
+                            def get_val(col_name):
+                                idx = indices[col_name]
+                                if idx >= 0 and idx < row_len:
+                                    return row[idx].strip()
+                                return None
+                            
+                            pSymbol = get_val('pSymbol')
+                            pExchSeg = get_val('pExchSeg')
+                            pSymbolName = get_val('pSymbolName')
+                            pTrdSymbol = get_val('pTrdSymbol')
+                            pOptionType = get_val('pOptionType')
+                            pInstType = get_val('pInstType')
+                            pScripRefKey = get_val('pScripRefKey')
+                            pDesc = get_val('pDesc')
+                            pGroup = get_val('pGroup')
+                            pAssetCode = get_val('pAssetCode')
+                            
+                            strike_val = get_val('dStrikePrice')
+                            try:
+                                dStrikePrice = float(strike_val) if strike_val else 0.0
+                            except ValueError:
+                                dStrikePrice = 0.0
+
+                            tick_val = get_val('dTickSize')
+                            try:
+                                dTickSize = float(tick_val) if tick_val else 0.0
+                            except ValueError:
+                                dTickSize = 0.0
+
+                            lot_val = get_val('lLotSize')
+                            try:
+                                lLotSize = int(lot_val) if lot_val else 0
+                            except ValueError:
+                                lLotSize = 0
+
+                            expire_date = None
+                            if pScripRefKey:
+                                m = date_pat.search(pScripRefKey)
+                                if m:
+                                    day, mon, yr = m.groups()
+                                    mon_num = month_map.get(mon.upper())
+                                    if mon_num:
+                                        try:
+                                            year = 2000 + int(yr)
+                                            expire_date = f"{year:04d}-{mon_num:02d}-{int(day):02d}"
+                                        except Exception:
+                                            pass
+
+                            if expire_date and expire_date < today_str:
+                                continue
+
+                            has_option_chain = 1 if (pSymbol in option_underlyings) else 0
+
+                            batch.append((
+                                pSymbol, pExchSeg, pSymbolName, pTrdSymbol, pOptionType, pInstType,
+                                dStrikePrice, pScripRefKey, pDesc, pGroup, pAssetCode,
+                                dTickSize, lLotSize, expire_date, has_option_chain
+                            ))
+
+                            if len(batch) >= 1000:
+                                cursor.executemany(insert_sql, batch)
+                                batch = []
+                        
+                        if batch:
+                            cursor.executemany(insert_sql, batch)
+
+                except Exception as fe:
+                    logger.error(f"Error in Pass 2 for file {csv_file}: {fe}")
+
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_symbol_exch ON active_market_data (pSymbol, pExchSeg)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_asset_code ON active_market_data (pAssetCode)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_name ON active_market_data (pSymbolName)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_ref_key ON active_market_data (pScripRefKey)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_expiry ON active_market_data (expire_date)")
+            
+            cursor.execute("SELECT COUNT(*) FROM active_market_data")
+            row_count = cursor.fetchone()[0]
+            logger.info(f"Refreshed SQLite active_market_data with {row_count} active scrips.")
             return True, f"Refreshed with {row_count} scrips from {len(csv_files)} files.", row_count
+
     except Exception as e:
         logger.error(f"Error performing scrip cache refresh: {e}")
         return False, str(e), 0
 
 
 def ensure_scrip_cache():
-    """Ensure active_market_data is loaded in DuckDB"""
+    """Ensure active_market_data is loaded in SQLite"""
     try:
-        with _duckdb_lock:
-            # Check if table exists
-            table_check = _duckdb_connection.execute("SELECT count(*) FROM information_schema.tables WHERE table_name = 'active_market_data'").fetchone()[0]
+        connection = connections['scrip_cache']
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='active_market_data'")
+            table_check = cursor.fetchone()[0]
             if table_check > 0:
-                count = _duckdb_connection.execute("SELECT count(*) FROM active_market_data").fetchone()[0]
+                cursor.execute("SELECT count(*) FROM active_market_data")
+                count = cursor.fetchone()[0]
                 if count > 0:
                     return True
         
-        # If not exists or empty, trigger refresh
         success, _, _ = _perform_scrip_cache_refresh()
         return success
     except Exception as e:
@@ -1194,8 +1347,10 @@ def refresh_scrip_cache(request):
             status = _check_scrip_status_logic()
             if not status.get('needs_refresh'):
                 try:
-                    with _duckdb_lock:
-                        current_rows = _duckdb_connection.execute('SELECT COUNT(*) FROM active_market_data').fetchone()[0]
+                    connection = connections['scrip_cache']
+                    with connection.cursor() as cursor:
+                        cursor.execute('SELECT COUNT(*) FROM active_market_data')
+                        current_rows = cursor.fetchone()[0]
                 except Exception:
                     current_rows = 0
                 return JsonResponse({'status': 'success', 'message': 'Scrip cache is already up-to-date.', 'row_count': current_rows})
@@ -1220,9 +1375,11 @@ def search_scrip_cache(request):
         if not search_term or len(search_term) < 2:
             return JsonResponse({'error': 'Search term must be at least 2 characters.'}, status=400)
 
-        with _duckdb_lock:
+        connection = connections['scrip_cache']
+        with connection.cursor() as cursor:
             try:
-                row_count = _duckdb_connection.execute('SELECT COUNT(*) FROM active_market_data').fetchone()[0]
+                cursor.execute('SELECT COUNT(*) FROM active_market_data')
+                row_count = cursor.fetchone()[0]
                 if row_count == 0:
                     return JsonResponse({
                         'error': 'Scrip cache is empty. Please refresh the scrip cache and try again.',
@@ -1321,13 +1478,13 @@ def search_scrip_cache(request):
                     pTrdSymbol,
                     pOptionType,
                     pInstType,
-                    CAST(COALESCE("dStrikePrice;", 0) AS DECIMAL) / 100 as dStrikePrice,
+                    CAST(COALESCE(dStrikePrice, 0) AS REAL) / 100 as dStrikePrice,
                     pScripRefKey,
                     pDesc,
                     COALESCE(pGroup, '') as pGroup,
-                    COALESCE(CAST(pAssetCode AS VARCHAR), '') as pAssetCode,
+                    COALESCE(CAST(pAssetCode AS TEXT), '') as pAssetCode,
                     has_option_chain,
-                    CAST(COALESCE(dTickSize, dTickSize, 0) AS DECIMAL) / 100 as dTickSize,
+                    CAST(COALESCE(dTickSize, 0) AS REAL) / 100 as dTickSize,
                     CAST(COALESCE(lLotSize, 0) AS INTEGER) as lLotSize
                 FROM active_market_data
                 WHERE {where_clause} AND {final_search}
@@ -1335,7 +1492,8 @@ def search_scrip_cache(request):
                 LIMIT 50
             """
 
-            results = _duckdb_connection.execute(query, params).fetchall()
+            cursor.execute(query, params)
+            results = cursor.fetchall()
             columns = ['pSymbol', 'pExchSeg', 'pSymbolName', 'pTrdSymbol', 'pOptionType', 'pInstType', 'dStrikePrice', 'pScripRefKey', 'pDesc', 'pGroup', 'pAssetCode', 'has_option_chain', 'dTickSize', 'lLotSize']
             
             data = [dict(zip(columns, row)) for row in results]
@@ -1344,7 +1502,7 @@ def search_scrip_cache(request):
             for item in data:
                 item['pGroupDesc'] = get_p_group_description(item.get('pExchSeg'), item.get('pGroup'))
             
-            logger.info(f"DuckDB DB Scrip search execution for '{search_term}' using filters (exchange: {exchange}, inst_type: {inst_type}) returned {len(data)} results.")
+            logger.info(f"SQLite DB Scrip search execution for '{search_term}' using filters (exchange: {exchange}, inst_type: {inst_type}) returned {len(data)} results.")
             
             return JsonResponse({
                 'results': data,
@@ -1367,19 +1525,21 @@ def get_scrip_info_ajax(request):
         query = """
             SELECT 
                 pSymbol, pExchSeg, pSymbolName, pTrdSymbol, pOptionType, pInstType,
-                CAST(COALESCE("dStrikePrice;", 0) AS DECIMAL) / 100 as dStrikePrice,
+                CAST(COALESCE(dStrikePrice, 0) AS REAL) / 100 as dStrikePrice,
                 pScripRefKey, pDesc,
                 COALESCE(pGroup, '') as pGroup,
-                COALESCE(CAST(pAssetCode AS VARCHAR), '') as pAssetCode,
+                COALESCE(CAST(pAssetCode AS TEXT), '') as pAssetCode,
                 has_option_chain,
-                CAST(COALESCE(dTickSize, 0) AS DECIMAL) / 100 as dTickSize,
+                CAST(COALESCE(dTickSize, 0) AS REAL) / 100 as dTickSize,
                 CAST(COALESCE(lLotSize, 0) AS INTEGER) as lLotSize
             FROM active_market_data
             WHERE pSymbol = ? AND pExchSeg = ?
             LIMIT 1
         """
-        with _duckdb_lock:
-            results = _duckdb_connection.execute(query, [token, exch]).fetchall()
+        connection = connections['scrip_cache']
+        with connection.cursor() as cursor:
+            cursor.execute(query, [token, exch])
+            results = cursor.fetchall()
         
         if not results:
             return JsonResponse({'error': 'Scrip not found in cache'}, status=404)
@@ -1403,19 +1563,21 @@ def get_option_chain_ajax(request):
         query = """
             SELECT 
                 pSymbol, pExchSeg, pSymbolName, pTrdSymbol, pOptionType, pInstType,
-                CAST(COALESCE("dStrikePrice;", 0) AS DECIMAL) / 100 as dStrikePrice,
+                CAST(COALESCE(dStrikePrice, 0) AS REAL) / 100 as dStrikePrice,
                 pScripRefKey, pDesc,
-                CAST(COALESCE(dTickSize, 0) AS DECIMAL) / 100 as dTickSize,
+                CAST(COALESCE(dTickSize, 0) AS REAL) / 100 as dTickSize,
                 CAST(COALESCE(lLotSize, 0) AS INTEGER) as lLotSize,
-                strftime(expire_date, '%Y-%m-%d') as expire_date_str
+                strftime('%Y-%m-%d', expire_date) as expire_date_str
             FROM active_market_data
-            WHERE CAST(pAssetCode AS VARCHAR) = ? 
+            WHERE CAST(pAssetCode AS TEXT) = ? 
               AND pInstType IN ('OPTIDX', 'OPTSTK', 'IO', 'SO')
             ORDER BY expire_date, dStrikePrice
         """
         
-        with _duckdb_lock:
-            results = _duckdb_connection.execute(query, [p_symbol]).fetchall()
+        connection = connections['scrip_cache']
+        with connection.cursor() as cursor:
+            cursor.execute(query, [p_symbol])
+            results = cursor.fetchall()
         
         columns = ['pSymbol', 'pExchSeg', 'pSymbolName', 'pTrdSymbol', 'pOptionType', 'pInstType', 'dStrikePrice', 'pScripRefKey', 'pDesc', 'dTickSize', 'lLotSize', 'expire_date_str']
         raw_data = [dict(zip(columns, row)) for row in results]
