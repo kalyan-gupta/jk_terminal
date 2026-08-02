@@ -1289,14 +1289,21 @@ def _check_scrip_status_logic():
                 'cutoff': cutoff_time.strftime('%Y-%m-%d %H:%M:%S')
             }
             
-        with _duckdb_lock:
-            table_check = _duckdb_connection.execute("SELECT count(*) FROM information_schema.tables WHERE table_name = 'active_market_data'").fetchone()[0]
-            if table_check == 0:
-                return {'needs_refresh': True, 'reason': 'Cache empty'}
-            
-            count = _duckdb_connection.execute("SELECT count(*) FROM active_market_data").fetchone()[0]
-            if count == 0:
-                return {'needs_refresh': True, 'reason': 'Cache empty'}
+        try:
+            connection = connections['scrip_cache']
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='active_market_data'")
+                table_check = cursor.fetchone()[0]
+                if table_check == 0:
+                    return {'needs_refresh': True, 'reason': 'Cache empty'}
+                
+                cursor.execute("SELECT count(*) FROM active_market_data")
+                count = cursor.fetchone()[0]
+                if count == 0:
+                    return {'needs_refresh': True, 'reason': 'Cache empty'}
+        except Exception as db_err:
+            logger.error(f"Error checking cache status in SQLite: {db_err}")
+            return {'needs_refresh': True, 'reason': 'Cache check failed'}
                 
     except Exception as e:
         return {'needs_refresh': True, 'reason': f'Error checking files/cache: {str(e)}'}
