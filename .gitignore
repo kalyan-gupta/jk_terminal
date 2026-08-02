@@ -25,3 +25,4 @@ git_ignore/
 staticfiles/
 .venv/
 reference.txt
+docs-site/*
