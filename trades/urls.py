@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, views_basket
+from . import views
 
 urlpatterns = [
     # Authentication URLs
@@ -54,13 +54,13 @@ urlpatterns = [
     path('get_limits_ajax/', views.get_limits_ajax, name='get_limits_ajax'),
     
     # Basket URLs
-    path('basket/add/', views_basket.add_to_basket_ajax, name='add_to_basket_ajax'),
-    path('basket/get/', views_basket.get_basket_ajax, name='get_basket_ajax'),
-    path('basket/remove/', views_basket.remove_from_basket_ajax, name='remove_from_basket_ajax'),
-    path('basket/clear/', views_basket.clear_basket_ajax, name='clear_basket_ajax'),
-    path('basket/update_sequence/', views_basket.update_basket_sequence_ajax, name='update_basket_sequence_ajax'),
-    path('basket/update_item/', views_basket.update_basket_item_ajax, name='update_basket_item_ajax'),
-    path('basket/execute/', views_basket.execute_basket_ajax, name='execute_basket_ajax'),
-    path('basket/check_margin/', views_basket.check_basket_margin_ajax, name='check_basket_margin_ajax'),
-    path('basket/reorder/', views_basket.reorder_basket_ajax, name='reorder_basket_ajax'),
+    path('basket/add/', views.add_to_basket_ajax, name='add_to_basket_ajax'),
+    path('basket/get/', views.get_basket_ajax, name='get_basket_ajax'),
+    path('basket/remove/', views.remove_from_basket_ajax, name='remove_from_basket_ajax'),
+    path('basket/clear/', views.clear_basket_ajax, name='clear_basket_ajax'),
+    path('basket/update_sequence/', views.update_basket_sequence_ajax, name='update_basket_sequence_ajax'),
+    path('basket/update_item/', views.update_basket_item_ajax, name='update_basket_item_ajax'),
+    path('basket/execute/', views.execute_basket_ajax, name='execute_basket_ajax'),
+    path('basket/check_margin/', views.check_basket_margin_ajax, name='check_basket_margin_ajax'),
+    path('basket/reorder/', views.reorder_basket_ajax, name='reorder_basket_ajax'),
 ]

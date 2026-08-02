@@ -10,4 +10,4 @@ echo "📁 Collecting static files..."
 python manage.py collectstatic --noinput
 
 echo "🌐 Starting Daphne production server..."
-exec python -m daphne -b 0.0.0.0 -p 8000 trading_platform.asgi:application
+exec python -m daphne -b 0.0.0.0 -p 8000 config.asgi:application

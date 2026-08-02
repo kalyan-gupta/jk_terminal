@@ -79,13 +79,13 @@ def run():
         daphne_bin = os.path.join(venv_bin, 'daphne' if os.name != 'nt' else 'daphne.exe')
         
         env = os.environ.copy()
-        env['DJANGO_SETTINGS_MODULE'] = 'trading_platform.settings'
+        env['DJANGO_SETTINGS_MODULE'] = 'config.settings'
 
         # If daphne is not found in bin, fallback to 'python -m daphne'
         if not os.path.exists(daphne_bin):
-            command = [sys.executable, "-m", "daphne", "-b", "0.0.0.0", "-p", "8000", "trading_platform.asgi:application"]
+            command = [sys.executable, "-m", "daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]
         else:
-            command = [daphne_bin, "-b", "0.0.0.0", "-p", "8000", "trading_platform.asgi:application"]
+            command = [daphne_bin, "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]
             
         subprocess.run(command, env=env, check=True)
         

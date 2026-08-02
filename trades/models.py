@@ -634,3 +634,26 @@ class TrackedOrder(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - Order {self.order_id} ({self.last_status})"
+
+
+class ActiveMarketData(models.Model):
+    symbol = models.CharField(max_length=100, db_column='pSymbol', null=True, blank=True)
+    exch_seg = models.CharField(max_length=50, db_column='pExchSeg', null=True, blank=True)
+    symbol_name = models.CharField(max_length=255, db_column='pSymbolName', null=True, blank=True)
+    trd_symbol = models.CharField(max_length=255, db_column='pTrdSymbol', null=True, blank=True)
+    option_type = models.CharField(max_length=20, db_column='pOptionType', null=True, blank=True)
+    inst_type = models.CharField(max_length=50, db_column='pInstType', null=True, blank=True)
+    strike_price = models.FloatField(db_column='dStrikePrice', null=True, blank=True)
+    scrip_ref_key = models.CharField(max_length=255, db_column='pScripRefKey', primary_key=True)
+    desc = models.TextField(db_column='pDesc', null=True, blank=True)
+    group = models.CharField(max_length=50, db_column='pGroup', null=True, blank=True)
+    asset_code = models.CharField(max_length=100, db_column='pAssetCode', null=True, blank=True)
+    tick_size = models.FloatField(db_column='dTickSize', null=True, blank=True)
+    lot_size = models.IntegerField(db_column='lLotSize', null=True, blank=True)
+    expire_date = models.CharField(max_length=50, null=True, blank=True)
+    has_option_chain = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'active_market_data'
+        managed = False
+
