@@ -1888,6 +1888,13 @@
             return cookieValue;
         }
 
+        function refreshTradingData() {
+            document.getElementById('refresh-orders-btn')?.click();
+            document.getElementById('refresh-holdings-btn')?.click();
+            document.getElementById('refresh-positions-btn')?.click();
+            document.getElementById('refresh-limits-btn')?.click();
+        }
+
         // Global Fetch Interceptor for 401/403 Error Handling
         const originalFetch = window.fetch;
         window.fetch = async (...args) => {
@@ -2031,6 +2038,22 @@
         let lastActiveOrderLtp = 0;
 
         
+        function sendWSMessage(action, params) {
+            const payload = {
+                'action': action,
+                'params': params
+            };
+            if (isSocketAuthenticated && typeof tradeSocket !== 'undefined' && tradeSocket && tradeSocket.readyState === WebSocket.OPEN) {
+                tradeSocket.send(JSON.stringify(payload));
+            } else {
+                // De-duplicate: Remove old matching pending action before pushing
+                pendingSubscriptions = pendingSubscriptions.filter(item => {
+                    return !(item.action === action && JSON.stringify(item.params) === JSON.stringify(params));
+                });
+                pendingSubscriptions.push(payload);
+            }
+        }
+
         function processPendingSubscriptions() {
             if (isSocketAuthenticated && typeof tradeSocket !== 'undefined' && tradeSocket && tradeSocket.readyState === WebSocket.OPEN) {
                 pendingSubscriptions.forEach(sub => {
@@ -2051,17 +2074,7 @@
                 return { "instrument_token": row.dataset.token, "exchange_segment": row.dataset.exch || "nse_cm" };
             });
             
-            const payload = {
-                'action': subscribe ? 'subscribe' : 'unsubscribe',
-                'params': { 'instrument_tokens': instruments }
-            };
-            
-            if (isSocketAuthenticated && typeof tradeSocket !== 'undefined' && tradeSocket && tradeSocket.readyState === WebSocket.OPEN) {
-                tradeSocket.send(JSON.stringify(payload));
-            } else if (subscribe) {
-                pendingSubscriptions.push(payload);
-                processPendingSubscriptions();
-            }
+            sendWSMessage(subscribe ? 'subscribe' : 'unsubscribe', { 'instrument_tokens': instruments });
         }
 
         // Tab change listener to manage subscriptions
@@ -2490,6 +2503,16 @@
                                     updateDepthUI(quote, 'order-buy-depth-body', 'order-sell-depth-body');
                                 }
                             }
+                            
+                            // Option Chain Call Depth
+                            if (typeof currentOCDepthSymbolCE !== 'undefined' && currentOCDepthSymbolCE === instrumentSymbol && quote.depth) {
+                                updateDepthUI(quote, `oc-ce-buy-${instrumentSymbol}`, `oc-ce-sell-${instrumentSymbol}`);
+                            }
+                            
+                            // Option Chain Put Depth
+                            if (typeof currentOCDepthSymbolPE !== 'undefined' && currentOCDepthSymbolPE === instrumentSymbol && quote.depth) {
+                                updateDepthUI(quote, `oc-pe-buy-${instrumentSymbol}`, `oc-pe-sell-${instrumentSymbol}`);
+                            }
                         });
                     } else if (incoming_data.type === 'server_init') {
                         console.log("Server Initialization Received. Start Time:", incoming_data.server_start_time);
@@ -2588,19 +2611,14 @@
                         if (document.getElementById('positions-tab')?.classList.contains('active')) {
                             manageTableSubscriptions('positions-table', true);
                         }
-                        // Re-subscribe to Option Chain if open
                         if (typeof processOCSubscriptions === 'function') {
                             processOCSubscriptions();
                         }
-                        // Re-subscribe to Depth if open
                         if (typeof currentDepthSymbol !== 'undefined' && currentDepthSymbol) {
-                             tradeSocket.send(JSON.stringify({
-                                'action': 'subscribe_depth',
-                                'params': {
-                                    'instrument_token': currentDepthSymbol,
-                                    'exchange_segment': currentDepthExch
-                                }
-                            }));
+                            sendWSMessage('subscribe_depth', {
+                                'instrument_token': currentDepthSymbol,
+                                'exchange_segment': currentDepthExch
+                            });
                         }
 
                         showNotification(incoming_data.message, 'success');
@@ -2925,16 +2943,11 @@
                         currentDepthExch = pExchSeg;
                         currentDepthIsIndex = isIndex;
                         
-                        if (tradeSocket.readyState === WebSocket.OPEN) {
-                            tradeSocket.send(JSON.stringify({
-                                'action': 'subscribe',
-                                'params': { 
-                                    'instrument_tokens': [{ "instrument_token": pSymbol, "exchange_segment": pExchSeg }],
-                                    'isDepth': true,
-                                    'isIndex': isIndex
-                                }
-                            }));
-                        }
+                        sendWSMessage('subscribe', { 
+                            'instrument_tokens': [{ "instrument_token": pSymbol, "exchange_segment": pExchSeg }],
+                            'isDepth': true,
+                            'isIndex': isIndex
+                        });
                         
                         // Update LTP
                         document.getElementById('depth-ltp').textContent = `₹${parseFloat(data.ltp).toFixed(2)}`;
@@ -2968,17 +2981,13 @@
                     });
             });
             
-            // Handle clearing depth stream when modal closes
             document.getElementById('depthModal').addEventListener('hidden.bs.modal', function () {
-                if (currentDepthSymbol && currentDepthExch && tradeSocket.readyState === WebSocket.OPEN) {
-                    tradeSocket.send(JSON.stringify({
-                        'action': 'unsubscribe',
-                        'params': { 
-                            'instrument_tokens': [{ "instrument_token": currentDepthSymbol, "exchange_segment": currentDepthExch }],
-                            'isDepth': true,
-                            'isIndex': currentDepthIsIndex
-                        }
-                    }));
+                if (currentDepthSymbol && currentDepthExch) {
+                    sendWSMessage('unsubscribe', { 
+                        'instrument_tokens': [{ "instrument_token": currentDepthSymbol, "exchange_segment": currentDepthExch }],
+                        'isDepth': true,
+                        'isIndex': currentDepthIsIndex
+                    });
                 }
                 currentDepthSymbol = null;
                 currentDepthExch = null;
@@ -3526,24 +3535,14 @@
                 if (tokensToUnsubscribe.length > 0) {
                     const unsubData = currentOCTokensWithExch.filter(t => tokensToUnsubscribe.includes(t.instrument_token));
                     if (unsubData.length > 0) {
-                        const payload = JSON.stringify({
-                            'action': 'unsubscribe',
-                            'params': { 'instrument_tokens': unsubData, 'isDepth': false }
-                        });
-                        tradeSocket.send(payload);
-                        for (let i = 1; i <= 5; i++) {
-                            setTimeout(() => { if (tradeSocket.readyState === WebSocket.OPEN) tradeSocket.send(payload); }, i * 200);
-                        }
+                        sendWSMessage('unsubscribe', { 'instrument_tokens': unsubData, 'isDepth': false });
                     }
                 }
                 
                 if (tokensToSubscribe.length > 0) {
                     const subData = currentOCTokensWithExch.filter(t => tokensToSubscribe.includes(t.instrument_token));
                     if (subData.length > 0) {
-                        tradeSocket.send(JSON.stringify({
-                            'action': 'subscribe',
-                            'params': { 'instrument_tokens': subData, 'isDepth': false }
-                        }));
+                        sendWSMessage('subscribe', { 'instrument_tokens': subData, 'isDepth': false });
                     }
                 }
             }
@@ -3572,7 +3571,7 @@
                     
                     if (changed) {
                         clearTimeout(ocSubscriptionTimeout);
-                        ocSubscriptionTimeout = setTimeout(processOCSubscriptions, 200);
+                        ocSubscriptionTimeout = setTimeout(processOCSubscriptions, 2000);
                     }
                 }, {
                     root: scrollRoot,
@@ -4033,23 +4032,12 @@
 
             ocModalEl.addEventListener('hidden.bs.modal', function() {
                 // Clear underlying subscription
-                if (currentOCUnderlyingSymbol && currentOCUnderlyingExch && tradeSocket.readyState === WebSocket.OPEN) {
-                    const payload = JSON.stringify({
-                        'action': 'unsubscribe',
-                        'params': { 
-                            'instrument_tokens': [{ "instrument_token": currentOCUnderlyingSymbol, "exchange_segment": currentOCUnderlyingExch }],
-                            'isDepth': false,
-                            'isIndex': false
-                        }
+                if (currentOCUnderlyingSymbol && currentOCUnderlyingExch) {
+                    sendWSMessage('unsubscribe', { 
+                        'instrument_tokens': [{ "instrument_token": currentOCUnderlyingSymbol, "exchange_segment": currentOCUnderlyingExch }],
+                        'isDepth': false,
+                        'isIndex': false
                     });
-                    tradeSocket.send(payload);
-                    for (let i = 1; i <= 5; i++) {
-                        setTimeout(() => {
-                            if (tradeSocket.readyState === WebSocket.OPEN) {
-                                tradeSocket.send(payload);
-                            }
-                        }, i * 200);
-                    }
                 }
                 
                 // Force unsubscribe all currently active option chain tokens
@@ -4244,7 +4232,7 @@
                                             showNotification(result.message, 'success');
                                             const orderModal = bootstrap.Modal.getInstance(document.getElementById('placeOrderModal'));
                                             orderModal.hide();
-                                            setTimeout(() => window.location.reload(), 1500);
+                                            setTimeout(() => refreshTradingData(), 1500);
                                         } else if (result.status === 'reauth_required') {
                                             showNotification('Trade session expired. Please reauthenticate.', 'warning');
                                         } else {
@@ -4328,7 +4316,7 @@
                                     showNotification(retryResult.message, 'success');
                                     const orderModal = bootstrap.Modal.getInstance(document.getElementById('placeOrderModal'));
                                     orderModal.hide();
-                                    setTimeout(() => window.location.reload(), 1500);
+                                    setTimeout(() => refreshTradingData(), 1500);
                                 } else {
                                     showNotification(retryResult.message || 'An unknown error occurred.', 'danger');
                                 }
@@ -4342,7 +4330,7 @@
                         showNotification(result.message, 'success');
                         const orderModal = bootstrap.Modal.getInstance(document.getElementById('placeOrderModal'));
                         orderModal.hide();
-                        setTimeout(() => window.location.reload(), 1500);
+                        setTimeout(() => refreshTradingData(), 1500);
                     } else {
                         showNotification(result.message || 'An unknown error occurred.', 'danger');
                     }
@@ -4418,7 +4406,7 @@
                         const cancelModal = bootstrap.Modal.getInstance(document.getElementById('cancelOrderModal'));
                         cancelModal.hide();
                         // Refresh the page to update order book
-                        setTimeout(() => window.location.reload(), 1500);
+                        setTimeout(() => refreshTradingData(), 1500);
                     } else {
                         showNotification(result.message || 'An unknown error occurred.', 'danger');
                     }
@@ -5472,20 +5460,24 @@
                 }
             }
 
-            document.getElementById('refresh-orders-btn')?.addEventListener('click', function() {
-                setRefreshLoading('refresh-orders-btn', true);
-                fetch('/get_order_book_ajax/')
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === 'success') {
-                            updateOrdersTable(data.data);
-                            showNotification('Order book refreshed', 'success');
-                        } else {
-                            showNotification('Failed to refresh orders: ' + data.message, 'danger');
-                        }
-                    })
-                    .catch(err => showNotification('Error refreshing orders', 'danger'))
-                    .finally(() => setRefreshLoading('refresh-orders-btn', false));
+            // Event delegation for refresh-orders-btn since the HTML is dynamically replaced
+            document.addEventListener('click', function(e) {
+                const btn = e.target.closest('#refresh-orders-btn');
+                if (btn) {
+                    setRefreshLoading('refresh-orders-btn', true);
+                    fetch('/get_order_book_ajax/')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                updateOrdersTable(data.data);
+                                showNotification('Order book refreshed', 'success');
+                            } else {
+                                showNotification('Failed to refresh orders: ' + data.message, 'danger');
+                            }
+                        })
+                        .catch(err => showNotification('Error refreshing orders', 'danger'))
+                        .finally(() => setRefreshLoading('refresh-orders-btn', false));
+                }
             });
 
             document.getElementById('refresh-holdings-btn')?.addEventListener('click', function() {
@@ -5543,11 +5535,11 @@
             });
 
             function updateOrdersTable(orders) {
-                const tbody = document.querySelector('#orders-tab-pane tbody');
-                if (!tbody) return;
+                const tabPane = document.getElementById('orders-tab-pane');
+                if (!tabPane) return;
                 
                 if (!orders || orders.length === 0) {
-                    document.getElementById('orders-tab-pane').innerHTML = `
+                    tabPane.innerHTML = `
                         <div class="d-flex justify-content-end mb-2">
                             <button class="btn btn-sm btn-outline-primary" id="refresh-orders-btn">
                                 <i class="bi bi-arrow-clockwise me-1"></i> Refresh Orders
@@ -5557,9 +5549,36 @@
                             <i class="bi bi-info-circle display-4 text-muted"></i>
                             <p class="mt-3">No orders found.</p>
                         </div>`;
-                    // Re-attach listener since we replaced innerHTML
-                    document.getElementById('refresh-orders-btn').addEventListener('click', () => document.getElementById('refresh-orders-btn').click());
                     return;
+                }
+
+                let tbody = tabPane.querySelector('tbody');
+                if (!tbody) {
+                    tabPane.innerHTML = `
+                        <div class="d-flex justify-content-end mb-2">
+                            <button class="btn btn-sm btn-outline-primary" id="refresh-orders-btn">
+                                <i class="bi bi-arrow-clockwise me-1"></i> Refresh Orders
+                            </button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover caption-top">
+                                <caption>List of your recent orders.</caption>
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Time</th>
+                                        <th>Symbol</th>
+                                        <th>Type</th>
+                                        <th>Qty</th>
+                                        <th>Price</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                </tbody>
+                            </table>
+                        </div>`;
+                    tbody = tabPane.querySelector('tbody');
                 }
 
                 let html = '';
@@ -5577,6 +5596,7 @@
                 });
                 tbody.innerHTML = html;
             }
+
 
             function updateHoldingsTable(holdings) {
                 const table = document.getElementById('holdings-table');

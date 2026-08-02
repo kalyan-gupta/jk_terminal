@@ -14,5 +14,8 @@ duckdb>=1.0.0
 requests
 cryptography
 
-# Kotak Neo API SDK
-neo-api-client @ git+https://github.com/Kotak-Neo/Kotak-neo-api-v2.git
+# Kotak Neo API SDK replacement
+websocket-client>=1.6.0
+pandas
+
+

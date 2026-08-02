@@ -317,8 +317,8 @@ def check_basket_margin_ajax(request):
                 order_type=order.order_type
             )
             
-            if isinstance(margin_response, dict) and 'data' in margin_response:
-                data = margin_response.get('data')
+            if isinstance(margin_response, dict):
+                data = margin_response.get('data', margin_response)
                 # Data can be a list or a dict depending on the exact response
                 if isinstance(data, list) and len(data) > 0:
                     item_data = data[0]

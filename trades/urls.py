@@ -23,6 +23,7 @@ urlpatterns = [
     
     # Admin Options
     path('admin-settings/', views.admin_settings_view, name='admin_settings'),
+    path('admin-settings/test-smtp/', views.admin_test_smtp_view, name='admin_test_smtp'),
     path('admin-settings/user/<int:user_id>/toggle/', views.admin_toggle_superuser, name='admin_toggle_superuser'),
     path('admin-settings/user/<int:user_id>/delete/', views.admin_delete_user, name='admin_delete_user'),
     path('admin-settings/user/<int:user_id>/reset-password/', views.admin_reset_user_password, name='admin_reset_user_password'),

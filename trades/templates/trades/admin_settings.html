@@ -262,6 +262,14 @@
                             <span class="text-muted small fw-normal">Displays a "Sign up" button on the login page and allows new users to create accounts autonomously.</span>
                         </label>
                     </div>
+
+                    <div class="mb-3 form-check form-switch fs-5 mt-4">
+                        <input class="form-check-input" type="checkbox" role="switch" id="enable_order_notifications" name="enable_order_notifications" {% if settings.enable_order_notifications %}checked{% endif %}>
+                        <label class="form-check-label fs-6 mt-1 ms-2" for="enable_order_notifications">
+                            <strong>Enable "Order Placement Notifications"</strong><br>
+                            <span class="text-muted small fw-normal">Sends a summary email to the user when they successfully place a trade order.</span>
+                        </label>
+                    </div>
             </div>
         </div>
 
@@ -301,6 +309,11 @@
                             <input class="form-check-input" type="checkbox" role="switch" id="allow_session_restore" name="allow_session_restore" {% if platform_settings.allow_session_restore %}checked{% endif %}>
                             <label class="form-check-label fs-6 fw-bold" for="allow_session_restore">Session Restore After Restart</label>
                             <div class="form-text small fs-6 mt-1" style="font-size: 0.85rem;">Automatically restore user & SDK sessions if the server process restarts.</div>
+                        </div>
+                        <div class="form-check form-switch fs-5 mt-4 mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="allow_direct_secret_auth" name="allow_direct_secret_auth" {% if platform_settings.allow_direct_secret_auth %}checked{% endif %}>
+                            <label class="form-check-label fs-6 fw-bold" for="allow_direct_secret_auth">Allow Direct Secret Authentication</label>
+                            <div class="form-text small fs-6 mt-1" style="font-size: 0.85rem;">Allow users to configure their TOTP secret key and bypass manual OTP entries.</div>
                         </div>
                     </div>
                 </div>
@@ -347,6 +360,12 @@
                     </div>
 
                     <div class="mb-3">
+                        <label for="from_name" class="form-label">From Name (Sender Display Name)</label>
+                        <input type="text" class="form-control" id="from_name" name="from_name" value="{{ settings.from_name|default_if_none:'' }}" placeholder="JK Terminal">
+                        <div class="form-text">The display name recipients will see (e.g. "JK Terminal").</div>
+                    </div>
+
+                    <div class="mb-3">
                         <label for="host_password" class="form-label">Password / App Password</label>
                         <input type="password" class="form-control" id="host_password" name="host_password" placeholder="Leave blank to keep existing password">
                         {% if settings.host_password %}
@@ -354,9 +373,127 @@
                         {% endif %}
                     </div>
                     
+                    <div class="section-title">Email Templates Configuration</div>
+                    <p class="text-muted small">Customize the subject lines and HTML bodies for system-generated emails. You can use standard Django template tags like <code>{% templatetag openvariable %} username {% templatetag closevariable %}</code>.</p>
+                    
+                    <div class="accordion mb-4" id="templatesAccordion">
+                        <!-- Registration Verification OTP Template -->
+                        <div class="accordion-item card border-0 mb-2">
+                            <h2 class="accordion-header" id="headingOtp">
+                                <button class="accordion-button collapsed fw-bold rounded" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOtp" aria-expanded="false" aria-controls="collapseOtp">
+                                    <i class="bi bi-shield-lock me-2"></i> Registration OTP Verification Template
+                                </button>
+                            </h2>
+                            <div id="collapseOtp" class="accordion-collapse collapse" aria-labelledby="headingOtp" data-bs-parent="#templatesAccordion">
+                                <div class="accordion-body bg-light bg-opacity-10 p-3">
+                                    <div class="mb-3">
+                                        <label for="otp_subject" class="form-label">Email Subject</label>
+                                        <input type="text" class="form-control" id="otp_subject" name="otp_subject" value="{{ settings.otp_subject }}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="otp_template" class="form-label">HTML Email Body</label>
+                                        <textarea class="form-control font-monospace" id="otp_template" name="otp_template" rows="12" style="font-size: 0.85rem; color: var(--text-primary); background-color: var(--input-bg);">{{ settings.otp_template }}</textarea>
+                                        <div class="form-text">Available placeholders: <code>{% templatetag openvariable %} username {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} otp {% templatetag closevariable %}</code></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Forgot Password Template -->
+                        <div class="accordion-item card border-0 mb-2">
+                            <h2 class="accordion-header" id="headingForgot">
+                                <button class="accordion-button collapsed fw-bold rounded" type="button" data-bs-toggle="collapse" data-bs-target="#collapseForgot" aria-expanded="false" aria-controls="collapseForgot">
+                                    <i class="bi bi-key me-2"></i> Forgot Password (Temporary Password) Template
+                                </button>
+                            </h2>
+                            <div id="collapseForgot" class="accordion-collapse collapse" aria-labelledby="headingForgot" data-bs-parent="#templatesAccordion">
+                                <div class="accordion-body bg-light bg-opacity-10 p-3">
+                                    <div class="mb-3">
+                                        <label for="forgot_password_subject" class="form-label">Email Subject</label>
+                                        <input type="text" class="form-control" id="forgot_password_subject" name="forgot_password_subject" value="{{ settings.forgot_password_subject }}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="forgot_password_template" class="form-label">HTML Email Body</label>
+                                        <textarea class="form-control font-monospace" id="forgot_password_template" name="forgot_password_template" rows="12" style="font-size: 0.85rem; color: var(--text-primary); background-color: var(--input-bg);">{{ settings.forgot_password_template }}</textarea>
+                                        <div class="form-text">Available placeholders: <code>{% templatetag openvariable %} username {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} temp_password {% templatetag closevariable %}</code></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Password Changed Notification Template -->
+                        <div class="accordion-item card border-0 mb-2">
+                            <h2 class="accordion-header" id="headingChanged">
+                                <button class="accordion-button collapsed fw-bold rounded" type="button" data-bs-toggle="collapse" data-bs-target="#collapseChanged" aria-expanded="false" aria-controls="collapseChanged">
+                                    <i class="bi bi-check-all me-2"></i> Password Changed Notification Template
+                                </button>
+                            </h2>
+                            <div id="collapseChanged" class="accordion-collapse collapse" aria-labelledby="headingChanged" data-bs-parent="#templatesAccordion">
+                                <div class="accordion-body bg-light bg-opacity-10 p-3">
+                                    <div class="mb-3">
+                                        <label for="password_changed_subject" class="form-label">Email Subject</label>
+                                        <input type="text" class="form-control" id="password_changed_subject" name="password_changed_subject" value="{{ settings.password_changed_subject }}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="password_changed_template" class="form-label">HTML Email Body</label>
+                                        <textarea class="form-control font-monospace" id="password_changed_template" name="password_changed_template" rows="12" style="font-size: 0.85rem; color: var(--text-primary); background-color: var(--input-bg);">{{ settings.password_changed_template }}</textarea>
+                                        <div class="form-text">Available placeholders: <code>{% templatetag openvariable %} username {% templatetag closevariable %}</code></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Trade Order Placed Notification Template -->
+                        <div class="accordion-item card border-0 mb-2">
+                            <h2 class="accordion-header" id="headingOrder">
+                                <button class="accordion-button collapsed fw-bold rounded" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOrder" aria-expanded="false" aria-controls="collapseOrder">
+                                    <i class="bi bi-currency-dollar me-2"></i> Trade Order Placed Notification Template
+                                </button>
+                            </h2>
+                            <div id="collapseOrder" class="accordion-collapse collapse" aria-labelledby="headingOrder" data-bs-parent="#templatesAccordion">
+                                <div class="accordion-body bg-light bg-opacity-10 p-3">
+                                    <div class="mb-3">
+                                        <label for="order_placed_subject" class="form-label">Email Subject</label>
+                                        <input type="text" class="form-control" id="order_placed_subject" name="order_placed_subject" value="{{ settings.order_placed_subject }}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="order_placed_template" class="form-label">HTML Email Body</label>
+                                        <textarea class="form-control font-monospace" id="order_placed_template" name="order_placed_template" rows="12" style="font-size: 0.85rem; color: var(--text-primary); background-color: var(--input-bg);">{{ settings.order_placed_template }}</textarea>
+                                        <div class="form-text">Available placeholders: <code>{% templatetag openvariable %} username {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} trading_symbol {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} transaction_type {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} quantity {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} price {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} order_type {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} product_type {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} exchange_segment {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} order_id {% templatetag closevariable %}</code></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Trade Order Status Update Notification Template -->
+                        <div class="accordion-item card border-0 mb-2">
+                            <h2 class="accordion-header" id="headingOrderStatus">
+                                <button class="accordion-button collapsed fw-bold rounded" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOrderStatus" aria-expanded="false" aria-controls="collapseOrderStatus">
+                                    <i class="bi bi-clock-history me-2"></i> Trade Order Status Update Notification Template
+                                </button>
+                            </h2>
+                            <div id="collapseOrderStatus" class="accordion-collapse collapse" aria-labelledby="headingOrderStatus" data-bs-parent="#templatesAccordion">
+                                <div class="accordion-body bg-light bg-opacity-10 p-3">
+                                    <div class="mb-3">
+                                        <label for="order_status_subject" class="form-label">Email Subject</label>
+                                        <input type="text" class="form-control" id="order_status_subject" name="order_status_subject" value="{{ settings.order_status_subject }}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="order_status_template" class="form-label">HTML Email Body</label>
+                                        <textarea class="form-control font-monospace" id="order_status_template" name="order_status_template" rows="12" style="font-size: 0.85rem; color: var(--text-primary); background-color: var(--input-bg);">{{ settings.order_status_template }}</textarea>
+                                        <div class="form-text">Available placeholders: <code>{% templatetag openvariable %} username {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} trading_symbol {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} transaction_type {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} quantity {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} price {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} order_id {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} last_status {% templatetag closevariable %}</code></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="mt-4 d-flex gap-2">
                         <button type="submit" form="settings-form" class="btn btn-primary">
                             <i class="bi bi-check-circle"></i> Save All Settings
+                        </button>
+                        <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#testSmtpModal">
+                            <i class="bi bi-send-fill"></i> Test SMTP Connection
                         </button>
                         <a href="{% url 'index' %}" class="btn btn-outline-secondary">
                             <i class="bi bi-x-circle"></i> Cancel
@@ -562,6 +699,36 @@
         </div>
     </div>
 
+    <!-- Test SMTP Modal -->
+    <div class="modal fade" id="testSmtpModal" tabindex="-1" aria-labelledby="testSmtpModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="testSmtpModalLabel"><i class="bi bi-send-fill me-2 text-info"></i>Test SMTP Settings</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="test-smtp-alert" class="alert d-none" role="alert"></div>
+                    <p class="text-muted small">
+                        Verify your SMTP credentials by sending a test email. This will test using the configuration values currently entered in the form above.
+                    </p>
+                    <div class="mb-3">
+                        <label for="test_recipient" class="form-label">Recipient Email Address</label>
+                        <input type="email" class="form-control" id="test_recipient" name="test_recipient" value="{{ request.user.email|default:'' }}" placeholder="name@example.com" required>
+                        <div class="form-text">We'll attempt to send a verification email to this address.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-info text-white" id="btn-send-test-email">
+                        <span id="test-smtp-spinner" class="spinner-border spinner-border-sm d-none me-2" role="status" aria-hidden="true"></span>
+                        <i class="bi bi-paper-plane-fill me-1" id="test-smtp-plane-icon"></i> Send Test Email
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         function openResetPasswordModal(userId, username) {
@@ -574,6 +741,78 @@
         document.querySelectorAll('.reset-pwd-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 openResetPasswordModal(this.dataset.userId, this.dataset.username);
+            });
+        });
+
+        // Test SMTP connection logic
+        document.getElementById('btn-send-test-email').addEventListener('click', function() {
+            const recipient = document.getElementById('test_recipient').value.trim();
+            if (!recipient) {
+                const alertDiv = document.getElementById('test-smtp-alert');
+                alertDiv.className = 'alert alert-danger';
+                alertDiv.innerText = 'Please enter a recipient email address.';
+                alertDiv.classList.remove('d-none');
+                return;
+            }
+
+            // Gather inputs from the form
+            const host = document.getElementById('host').value;
+            const port = document.getElementById('port').value;
+            const use_tls = document.getElementById('use_tls').checked;
+            const host_user = document.getElementById('host_user').value;
+            const from_address = document.getElementById('from_address').value;
+            const host_password = document.getElementById('host_password').value;
+
+            // UI feedback
+            const spinner = document.getElementById('test-smtp-spinner');
+            const planeIcon = document.getElementById('test-smtp-plane-icon');
+            const btn = document.getElementById('btn-send-test-email');
+            const alertDiv = document.getElementById('test-smtp-alert');
+            
+            spinner.classList.remove('d-none');
+            planeIcon.classList.add('d-none');
+            btn.disabled = true;
+            alertDiv.classList.add('d-none');
+
+            // Send AJAX POST
+            fetch("{% url 'admin_test_smtp' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    host: host,
+                    port: port,
+                    use_tls: use_tls,
+                    host_user: host_user,
+                    from_address: from_address,
+                    host_password: host_password,
+                    test_recipient: recipient
+                })
+            })
+            .then(response => {
+                return response.json().then(data => {
+                    if (!response.ok) {
+                        throw new Error(data.message || 'Error occurred while testing.');
+                    }
+                    return data;
+                });
+            })
+            .then(data => {
+                alertDiv.className = 'alert alert-success';
+                alertDiv.innerHTML = `<i class="bi bi-check-circle-fill me-2"></i> ${data.message}`;
+                alertDiv.classList.remove('d-none');
+            })
+            .catch(error => {
+                alertDiv.className = 'alert alert-danger';
+                alertDiv.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-2"></i> ${error.message}`;
+                alertDiv.classList.remove('d-none');
+            })
+            .finally(() => {
+                spinner.classList.add('d-none');
+                planeIcon.classList.remove('d-none');
+                btn.disabled = false;
             });
         });
     </script>

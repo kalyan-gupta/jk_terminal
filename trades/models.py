@@ -13,8 +13,17 @@ class UserNeoCredentials(models.Model):
     mpin = models.CharField(max_length=500)  # Encrypted
     consumer_key = models.CharField(max_length=500)  # Encrypted
     mobile_number = models.CharField(max_length=500)  # Encrypted
-
+    totp_secret = models.CharField(max_length=500, blank=True, null=True)  # Encrypted
     
+    auth_mode = models.CharField(
+        max_length=20, 
+        default='manual', 
+        choices=[
+            ('manual', 'Manual Auth using Auth Code'),
+            ('secret', 'Direct Auth using Secret')
+        ]
+    )
+
     # Plain text fields
     ucc = models.CharField(max_length=100)
     account_name = models.CharField(max_length=255)
@@ -84,6 +93,8 @@ class UserNeoCredentials(models.Model):
         self.mpin = self.encrypt_field(self.mpin)
         self.consumer_key = self.encrypt_field(self.consumer_key)
         self.mobile_number = self.encrypt_field(self.mobile_number)
+        if self.totp_secret:
+            self.totp_secret = self.encrypt_field(self.totp_secret)
         super().save(*args, **kwargs)
     
     def get_decrypted_credentials(self):
@@ -92,17 +103,20 @@ class UserNeoCredentials(models.Model):
             'MPIN': self.decrypt_field(self.mpin),
             'CONSUMER_KEY': self.decrypt_field(self.consumer_key),
             'MOBILE_NUMBER': self.decrypt_field(self.mobile_number),
+            'TOTP_SECRET': self.decrypt_field(self.totp_secret) if self.totp_secret else '',
             'UCC': self.ucc,
             'ACCOUNT_NAME': self.account_name,
         }
     
-    def update_credentials(self, mpin, consumer_key, mobile_number, ucc, account_name):
+    def update_credentials(self, mpin, consumer_key, mobile_number, ucc, account_name, totp_secret=None, auth_mode='manual'):
         """Update credentials (will be encrypted on save)"""
         self.mpin = mpin
         self.consumer_key = consumer_key
         self.mobile_number = mobile_number
         self.ucc = ucc
         self.account_name = account_name
+        self.totp_secret = totp_secret
+        self.auth_mode = auth_mode
         self.updated_at = timezone.now()
         self.save()
 
@@ -196,6 +210,7 @@ class PlatformSettings(models.Model):
 
     enable_user_registration = models.BooleanField(default=True, help_text="Allow new users to register via the signup button")
     allow_session_restore = models.BooleanField(default=False, help_text="Allow restoring user and SDK sessions after server restarts")
+    allow_direct_secret_auth = models.BooleanField(default=True, help_text="Allow users to use a TOTP secret for direct session activation")
 
     class Meta:
         verbose_name = "Platform Settings"
@@ -210,6 +225,248 @@ class PlatformSettings(models.Model):
         return obj
 
 
+DEFAULT_OTP_TEMPLATE = """<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f5f7; margin: 0; padding: 0; color: #1e293b; }
+    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; padding: 32px 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+    .content { padding: 32px 24px; line-height: 1.6; }
+    .footer { text-align: center; padding: 24px; font-size: 12px; color: #64748b; background-color: #f8fafc; border-top: 1px solid #f1f5f9; }
+    .highlight-box { background-color: #f1f5f9; border-left: 4px solid #667eea; padding: 16px; border-radius: 0 8px 8px 0; font-family: monospace; font-size: 24px; letter-spacing: 4px; text-align: center; margin: 24px 0; color: #0f172a; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>JK Terminal</h1>
+    </div>
+    <div class="content">
+      <p>Hello <strong>{{ username }}</strong>,</p>
+      <p>Your account verification code is:</p>
+      <div class="highlight-box">{{ otp }}</div>
+      <p>Please enter this code to complete your registration. If you did not request this code, you can safely ignore this email.</p>
+      <p>Thank you,<br>JK Terminal Team</p>
+    </div>
+    <div class="footer">
+      This is an automated notification from JK Terminal. Please do not reply to this email.
+    </div>
+  </div>
+</body>
+</html>"""
+
+DEFAULT_PASSWORD_CHANGED_TEMPLATE = """<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f5f7; margin: 0; padding: 0; color: #1e293b; }
+    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; padding: 32px 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+    .content { padding: 32px 24px; line-height: 1.6; }
+    .footer { text-align: center; padding: 24px; font-size: 12px; color: #64748b; background-color: #f8fafc; border-top: 1px solid #f1f5f9; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>JK Terminal</h1>
+    </div>
+    <div class="content">
+      <p>Hello <strong>{{ username }}</strong>,</p>
+      <p>Your password has been successfully changed.</p>
+      <p>If you did not authorize this change, please contact an administrator immediately to secure your account.</p>
+      <p>Thank you,<br>JK Terminal Team</p>
+    </div>
+    <div class="footer">
+      This is an automated notification from JK Terminal. Please do not reply to this email.
+    </div>
+  </div>
+</body>
+</html>"""
+
+DEFAULT_FORGOT_PASSWORD_TEMPLATE = """<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f5f7; margin: 0; padding: 0; color: #1e293b; }
+    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; padding: 32px 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+    .content { padding: 32px 24px; line-height: 1.6; }
+    .footer { text-align: center; padding: 24px; font-size: 12px; color: #64748b; background-color: #f8fafc; border-top: 1px solid #f1f5f9; }
+    .highlight-box { background-color: #f1f5f9; border-left: 4px solid #667eea; padding: 16px; border-radius: 0 8px 8px 0; font-family: monospace; font-size: 20px; text-align: center; margin: 24px 0; color: #0f172a; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>JK Terminal</h1>
+    </div>
+    <div class="content">
+      <p>Hello <strong>{{ username }}</strong>,</p>
+      <p>Your temporary password is:</p>
+      <div class="highlight-box">{{ temp_password }}</div>
+      <p>Please login using this temporary password. You will be prompted to set a new permanent password immediately upon logging in.</p>
+      <p>Thank you,<br>JK Terminal Team</p>
+    </div>
+    <div class="footer">
+      This is an automated notification from JK Terminal. Please do not reply to this email.
+    </div>
+  </div>
+</body>
+</html>"""
+
+DEFAULT_ORDER_PLACED_TEMPLATE = """<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f5f7; margin: 0; padding: 0; color: #1e293b; }
+    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; padding: 32px 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+    .content { padding: 32px 24px; line-height: 1.6; }
+    .footer { text-align: center; padding: 24px; font-size: 12px; color: #64748b; background-color: #f8fafc; border-top: 1px solid #f1f5f9; }
+    .details-list { width: 100%; border-collapse: collapse; margin: 24px 0; }
+    .details-list td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
+    .details-list td.label { font-weight: 600; color: #475569; width: 40%; }
+    .details-list td.value { color: #0f172a; }
+    .badge-buy { display: inline-block; padding: 2px 8px; background-color: #dcfce7; color: #15803d; border-radius: 4px; font-weight: 600; font-size: 12px; }
+    .badge-sell { display: inline-block; padding: 2px 8px; background-color: #fee2e2; color: #b91c1c; border-radius: 4px; font-weight: 600; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>JK Terminal</h1>
+    </div>
+    <div class="content">
+      <p>Hello <strong>{{ username }}</strong>,</p>
+      <p>A new trade order has been successfully placed on your account:</p>
+      
+      <table class="details-list">
+        <tr>
+          <td class="label">Instrument</td>
+          <td class="value"><strong>{{ trading_symbol }}</strong></td>
+        </tr>
+        <tr>
+          <td class="label">Transaction Type</td>
+          <td class="value">
+            {% if transaction_type == "B" or transaction_type == "BUY" %}
+              <span class="badge-buy">BUY</span>
+            {% else %}
+              <span class="badge-sell">SELL</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td class="label">Quantity</td>
+          <td class="value">{{ quantity }}</td>
+        </tr>
+        <tr>
+          <td class="label">Price</td>
+          <td class="value">{% if order_type != "MKT" %}{{ price }}{% else %}Market{% endif %}</td>
+        </tr>
+        <tr>
+          <td class="label">Order Type</td>
+          <td class="value">{{ order_type }}</td>
+        </tr>
+        <tr>
+          <td class="label">Product</td>
+          <td class="value">{{ product_type }}</td>
+        </tr>
+        <tr>
+          <td class="label">Exchange</td>
+          <td class="value">{{ exchange_segment }}</td>
+        </tr>
+        <tr>
+          <td class="label">Order ID</td>
+          <td class="value"><code>{{ order_id }}</code></td>
+        </tr>
+      </table>
+      
+      <p>Regards,<br>JK Terminal</p>
+    </div>
+    <div class="footer">
+      This is an automated notification from JK Terminal. Please do not reply to this email.
+    </div>
+  </div>
+</body>
+</html>"""
+
+
+DEFAULT_ORDER_STATUS_TEMPLATE = """<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f5f7; margin: 0; padding: 0; color: #1e293b; }
+    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; padding: 32px 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+    .content { padding: 32px 24px; line-height: 1.6; }
+    .footer { text-align: center; padding: 24px; font-size: 12px; color: #64748b; background-color: #f8fafc; border-top: 1px solid #f1f5f9; }
+    .details-list { width: 100%; border-collapse: collapse; margin: 24px 0; }
+    .details-list td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
+    .details-list td.label { font-weight: 600; color: #475569; width: 40%; }
+    .details-list td.value { color: #0f172a; }
+    .status-badge { display: inline-block; padding: 4px 12px; border-radius: 9999px; font-weight: 700; font-size: 14px; text-transform: uppercase; }
+    .status-complete { background-color: #dcfce7; color: #15803d; }
+    .status-open { background-color: #dbeafe; color: #1d4ed8; }
+    .status-rejected { background-color: #fee2e2; color: #b91c1c; }
+    .status-cancelled { background-color: #f3f4f6; color: #374151; }
+    .status-other { background-color: #fef9c3; color: #a16207; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>JK Terminal</h1>
+    </div>
+    <div class="content">
+      <p>Hello <strong>{{ username }}</strong>,</p>
+      <p>Your order status has updated:</p>
+      
+      <div style="text-align: center; margin: 24px 0;">
+        <span class="status-badge {% if last_status == 'complete' %}status-complete{% elif last_status == 'open' %}status-open{% elif last_status == 'rejected' %}status-rejected{% elif last_status == 'cancelled' %}status-cancelled{% else %}status-other{% endif %}">
+          {{ last_status }}
+        </span>
+      </div>
+
+      <table class="details-list">
+        <tr>
+          <td class="label">Instrument</td>
+          <td class="value"><strong>{{ trading_symbol }}</strong></td>
+        </tr>
+        <tr>
+          <td class="label">Transaction Type</td>
+          <td class="value">{{ transaction_type }}</td>
+        </tr>
+        <tr>
+          <td class="label">Quantity</td>
+          <td class="value">{{ quantity }}</td>
+        </tr>
+        <tr>
+          <td class="label">Price</td>
+          <td class="value">₹{{ price }}</td>
+        </tr>
+        <tr>
+          <td class="label">Order ID</td>
+          <td class="value"><code>{{ order_id }}</code></td>
+        </tr>
+      </table>
+      
+      <p>Regards,<br>JK Terminal</p>
+    </div>
+    <div class="footer">
+      This is an automated notification from JK Terminal. Please do not reply to this email.
+    </div>
+  </div>
+</body>
+</html>"""
+
+
 class SMTPSettings(models.Model):
     """Store global SMTP settings editable by superusers"""
     host = models.CharField(max_length=255, default='smtp.gmail.com')
@@ -220,17 +477,63 @@ class SMTPSettings(models.Model):
     host_password = models.CharField(max_length=500, blank=True, null=True)  # Will be encrypted
     enable_password_reset = models.BooleanField(default=False)
     enable_registration_otp = models.BooleanField(default=False)
+    enable_order_notifications = models.BooleanField(default=True)
+
+    # Customizable Sender and Email Templates
+    from_name = models.CharField(max_length=255, default='JK Terminal', blank=True, null=True)
+    
+    otp_subject = models.CharField(max_length=255, default='JK Terminal - Registration Verification')
+    otp_template = models.TextField(default=DEFAULT_OTP_TEMPLATE)
+    
+    password_changed_subject = models.CharField(max_length=255, default='JK Terminal - Password Changed Successfully')
+    password_changed_template = models.TextField(default=DEFAULT_PASSWORD_CHANGED_TEMPLATE)
+    
+    forgot_password_subject = models.CharField(max_length=255, default='JK Terminal - Temporary Password')
+    forgot_password_template = models.TextField(default=DEFAULT_FORGOT_PASSWORD_TEMPLATE)
+    
+    order_placed_subject = models.CharField(max_length=255, default='JK Terminal - Trade Order Placed: {{ transaction_type }} {{ quantity }} {{ trading_symbol }}')
+    order_placed_template = models.TextField(default=DEFAULT_ORDER_PLACED_TEMPLATE)
+
+    order_status_subject = models.CharField(max_length=255, default='JK Terminal - Trade Order: {{ transaction_type }} {{ quantity }} {{ trading_symbol }} is {{ last_status }}')
+    order_status_template = models.TextField(default=DEFAULT_ORDER_STATUS_TEMPLATE)
     
     class Meta:
         verbose_name = "SMTP Settings"
         verbose_name_plural = "SMTP Settings"
 
+    def send_html_email(self, subject_template, body_template, context_dict, to_emails, connection=None):
+        from django.template import Template, Context
+        from django.core.mail import EmailMultiAlternatives
+        from django.utils.html import strip_tags
+        
+        ctx = Context(context_dict)
+        subject = Template(subject_template).render(ctx).strip()
+        html_content = Template(body_template).render(ctx)
+        text_content = strip_tags(html_content)
+        
+        from_addr = self.from_address if self.from_address else self.host_user
+        if self.from_name:
+            from_email = f"{self.from_name} <{from_addr}>"
+        else:
+            from_email = from_addr
+            
+        email_msg = EmailMultiAlternatives(
+            subject=subject,
+            body=text_content,
+            from_email=from_email,
+            to=to_emails,
+            connection=connection
+        )
+        email_msg.attach_alternative(html_content, "text/html")
+        return email_msg
+
     def __str__(self):
         return f"SMTP Configuration ({self.host}:{self.port})"
 
-    @classmethod
-    def get_settings(cls):
-        obj, created = cls.objects.get_or_create(id=1)
+    @staticmethod
+    def get_settings():
+        """Retrieve the singleton settings or create one with defaults"""
+        obj, created = SMTPSettings.objects.get_or_create(id=1)
         return obj
 
     @staticmethod
@@ -238,41 +541,26 @@ class SMTPSettings(models.Model):
         key = os.environ.get('ENCRYPTION_KEY', 'default-key-change-in-production')
         import hashlib
         import base64
+        from cryptography.fernet import Fernet
         hash_key = hashlib.sha256(key.encode()).digest()
         return Fernet(base64.urlsafe_b64encode(hash_key))
 
     def encrypt_field(self, value):
         if not value:
             return value
-        if self.is_encrypted(value):
+        if value.startswith('gAAAAA'):
             return value
         cipher = self.get_cipher()
         return cipher.encrypt(value.encode()).decode()
-
-    def is_encrypted(self, value):
-        if not isinstance(value, str) or not value.startswith('gAAAAA'):
-            return False
-        try:
-            cipher = self.get_cipher()
-            cipher.decrypt(value.encode())
-            return True
-        except Exception:
-            return False
 
     def decrypt_field(self, encrypted_value):
         if not encrypted_value:
             return encrypted_value
         cipher = self.get_cipher()
-        current = encrypted_value
-        for _ in range(5):
-            try:
-                decrypted = cipher.decrypt(current.encode()).decode()
-            except Exception:
-                break
-            if decrypted == current:
-                break
-            current = decrypted
-        return current
+        try:
+            return cipher.decrypt(encrypted_value.encode()).decode()
+        except Exception:
+            return encrypted_value
 
     def get_decrypted_password(self):
         return self.decrypt_field(self.host_password)
@@ -322,3 +610,27 @@ class BasketOrder(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.transaction_type} {self.quantity} {self.trading_symbol}"
+
+
+class TrackedOrder(models.Model):
+    """Persist and track order lifecycle states for status change email alerts"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tracked_orders')
+    order_id = models.CharField(max_length=100, unique=True)
+    trading_symbol = models.CharField(max_length=255)
+    transaction_type = models.CharField(max_length=10) # B / S
+    quantity = models.IntegerField()
+    price = models.FloatField()
+    order_type = models.CharField(max_length=10) # L / MKT
+    product_type = models.CharField(max_length=20) # MIS / CNC / NRML
+    exchange_segment = models.CharField(max_length=20)
+    last_status = models.CharField(max_length=50) # open, complete, rejected, cancelled, placed
+    is_terminal = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Tracked Order"
+        verbose_name_plural = "Tracked Orders"
+
+    def __str__(self):
+        return f"{self.user.username} - Order {self.order_id} ({self.last_status})"

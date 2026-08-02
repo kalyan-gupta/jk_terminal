@@ -113,26 +113,28 @@ class OTPVerifyForm(forms.Form):
 class UserNeoCredentialsForm(forms.ModelForm):
     """Form for managing Neo API credentials"""
     
-    # These will be decrypted on display, encrypted on save
     mpin = forms.CharField(
         label="MPIN",
-        widget=forms.PasswordInput(attrs={
+        required=False,
+        widget=forms.PasswordInput(render_value=True, attrs={
             'class': 'form-control',
-            'placeholder': 'Your MPIN'
+            'placeholder': 'Your MPIN (leave empty to keep unchanged)'
         })
     )
     consumer_key = forms.CharField(
         label="Consumer Key",
-        widget=forms.TextInput(attrs={
+        required=False,
+        widget=forms.PasswordInput(render_value=True, attrs={
             'class': 'form-control',
-            'placeholder': 'Your Consumer Key'
+            'placeholder': 'Your Consumer Key (leave empty to keep unchanged)'
         })
     )
     mobile_number = forms.CharField(
         label="Mobile Number",
+        required=False,
         widget=forms.TextInput(attrs={
             'class': 'form-control',
-            'placeholder': '+91XXXXXXXXXX'
+            'placeholder': '+91XXXXXXXXXX (leave empty to keep unchanged)'
         }),
         max_length=20
     )
@@ -152,19 +154,93 @@ class UserNeoCredentialsForm(forms.ModelForm):
         }),
         max_length=255
     )
+    auth_mode = forms.ChoiceField(
+        label="Authentication Mode",
+        choices=[
+            ('manual', 'Manual Auth using Auth Code'),
+            ('secret', 'Direct Auth using Secret')
+        ],
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    totp_secret = forms.CharField(
+        label="TOTP Secret Key (2FA)",
+        required=False,
+        widget=forms.PasswordInput(render_value=True, attrs={
+            'class': 'form-control',
+            'placeholder': 'Your TOTP Secret Key (leave empty to keep unchanged)'
+        })
+    )
     
     class Meta:
         model = UserNeoCredentials
-        fields = ['mpin', 'consumer_key', 'mobile_number', 'ucc', 'account_name']
+        fields = ['mpin', 'consumer_key', 'mobile_number', 'ucc', 'account_name', 'auth_mode', 'totp_secret']
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # If there's an instance, decrypt the credentials for display
         if self.instance and self.instance.pk:
-            decrypted = self.instance.get_decrypted_credentials()
-            self.fields['mpin'].initial = decrypted['MPIN']
-            self.fields['consumer_key'].initial = decrypted['CONSUMER_KEY']
-            self.fields['mobile_number'].initial = decrypted['MOBILE_NUMBER']
+            # Set the fields to a masked indicator if they are already populated
+            if self.instance.mpin:
+                self.initial['mpin'] = '••••••••'
+            if self.instance.consumer_key:
+                self.initial['consumer_key'] = '••••••••'
+            if self.instance.mobile_number:
+                # Let's decrypt and show a partially masked mobile number or just a placeholder
+                decrypted_mobile = self.instance.decrypt_field(self.instance.mobile_number)
+                if len(decrypted_mobile) > 4:
+                    self.initial['mobile_number'] = decrypted_mobile[:3] + '*' * (len(decrypted_mobile) - 7) + decrypted_mobile[-4:]
+                else:
+                    self.initial['mobile_number'] = '••••••••'
+            if self.instance.totp_secret:
+                self.initial['totp_secret'] = '••••••••'
+
+    def clean_mpin(self):
+        mpin = self.cleaned_data.get('mpin')
+        if not mpin or mpin == '••••••••':
+            if self.instance and self.instance.pk and self.instance.mpin:
+                return self.instance.mpin
+            raise forms.ValidationError("MPIN is required.")
+        return mpin
+
+    def clean_consumer_key(self):
+        consumer_key = self.cleaned_data.get('consumer_key')
+        if not consumer_key or consumer_key == '••••••••':
+            if self.instance and self.instance.pk and self.instance.consumer_key:
+                return self.instance.consumer_key
+            raise forms.ValidationError("Consumer Key is required.")
+        return consumer_key
+
+    def clean_mobile_number(self):
+        mobile_number = self.cleaned_data.get('mobile_number')
+        # Check if they left it blank or if it has the masked placeholder format
+        is_placeholder = not mobile_number or '*' in mobile_number or '•' in mobile_number
+        if is_placeholder:
+            if self.instance and self.instance.pk and self.instance.mobile_number:
+                return self.instance.mobile_number
+            raise forms.ValidationError("Mobile Number is required.")
+        return mobile_number
+
+    def clean_totp_secret(self):
+        totp_secret = self.cleaned_data.get('totp_secret')
+        if not totp_secret or totp_secret == '••••••••':
+            if self.instance and self.instance.pk and self.instance.totp_secret:
+                return self.instance.totp_secret
+            return ''
+        return totp_secret
+
+    def clean(self):
+        cleaned_data = super().clean()
+        auth_mode = cleaned_data.get('auth_mode')
+        totp_secret = cleaned_data.get('totp_secret')
+        
+        from trades.models import PlatformSettings
+        settings_obj = PlatformSettings.get_settings()
+        
+        if auth_mode == 'secret':
+            if not settings_obj.allow_direct_secret_auth:
+                self.add_error('auth_mode', "Direct authentication using TOTP secret is currently disabled by administrators.")
+            elif not totp_secret:
+                self.add_error('totp_secret', "TOTP Secret Key is required when using Direct Authentication mode.")
+        return cleaned_data
 
 
 class TOTPForm(forms.Form):

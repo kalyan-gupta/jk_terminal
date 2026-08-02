@@ -297,7 +297,7 @@ def register_view(request):
                 
                 # Send email
                 try:
-                    from django.core.mail import get_connection, EmailMessage
+                    from django.core.mail import get_connection
                     connection = get_connection(
                         host=settings_obj.host,
                         port=settings_obj.port,
@@ -305,12 +305,11 @@ def register_view(request):
                         password=settings_obj.get_decrypted_password(),
                         use_tls=settings_obj.use_tls
                     )
-                    from_addr = settings_obj.from_address if settings_obj.from_address else settings_obj.host_user
-                    email_msg = EmailMessage(
-                        subject="JK Terminal - Registration Verification",
-                        body=f"Hello {user.username},\n\nYour account verification code is: {otp}\n\nPlease enter this code to complete your registration.\n\nThank you.",
-                        from_email=from_addr,
-                        to=[user.email],
+                    email_msg = settings_obj.send_html_email(
+                        subject_template=settings_obj.otp_subject,
+                        body_template=settings_obj.otp_template,
+                        context_dict={'username': user.username, 'otp': otp},
+                        to_emails=[user.email],
                         connection=connection
                     )
                     email_msg.send(fail_silently=False)
@@ -434,6 +433,8 @@ def setup_credentials(request):
     except UserNeoCredentials.DoesNotExist:
         user_creds = None
     
+    plat_settings = PlatformSettings.get_settings()
+    
     if request.method == 'POST':
         form = UserNeoCredentialsForm(request.POST, instance=user_creds)
         if form.is_valid():
@@ -441,12 +442,18 @@ def setup_credentials(request):
             credentials.user = request.user
             credentials.save()
             logout_sdk_for_user(request.user, request=request)
+            if 'sdk_auto_auth_failed' in request.session:
+                del request.session['sdk_auto_auth_failed']
             messages.success(request, "Neo API credentials updated successfully! Please reauthenticate the trading session.")
             return redirect('index')
     else:
         form = UserNeoCredentialsForm(instance=user_creds)
     
-    return render(request, 'trades/credentials.html', {'form': form, 'has_credentials': user_creds is not None})
+    return render(request, 'trades/credentials.html', {
+        'form': form, 
+        'has_credentials': user_creds is not None,
+        'allow_direct_secret_auth': plat_settings.allow_direct_secret_auth
+    })
 
 
 @login_required_with_session_check
@@ -476,6 +483,21 @@ def reauthenticate_view(request):
         messages.warning(request, "Please configure your Neo API credentials first.")
         return redirect('setup_credentials')
 
+    plat_settings = PlatformSettings.get_settings()
+
+    # If user has direct secret activation enabled and active, and it is allowed globally, try auto-authenticating on GET
+    if request.method == 'GET' and user_creds.auth_mode == 'secret' and plat_settings.allow_direct_secret_auth:
+        api = KotakNeoAPI(user=request.user, session_id=request.session.session_key)
+        auth_result = api.authenticate(force_refresh=True)
+        if auth_result.get('status') == 'success':
+            if 'sdk_auto_auth_failed' in request.session:
+                del request.session['sdk_auto_auth_failed']
+            messages.success(request, "Neo SDK session authenticated automatically using saved TOTP secret.")
+            return redirect('index')
+        else:
+            request.session['sdk_auto_auth_failed'] = True
+            messages.warning(request, f"Automatic session activation failed: {auth_result.get('error', 'Unknown error')}. Please authenticate manually.")
+
     if request.method == 'POST':
         totp = None
         if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
@@ -493,6 +515,8 @@ def reauthenticate_view(request):
             api = KotakNeoAPI(user=request.user, session_id=request.session.session_key)
             auth_result = api.authenticate(totp=totp, force_refresh=True)
             if auth_result.get('status') == 'success':
+                if 'sdk_auto_auth_failed' in request.session:
+                    del request.session['sdk_auto_auth_failed']
                 if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
                     return JsonResponse({'status': 'success', 'message': "Neo SDK session authenticated successfully."})
                 messages.success(request, "Neo SDK session authenticated successfully.")
@@ -532,17 +556,25 @@ def edit_credentials(request):
         messages.error(request, "Please setup your credentials first.")
         return redirect('setup_credentials')
     
+    plat_settings = PlatformSettings.get_settings()
+    
     if request.method == 'POST':
         form = UserNeoCredentialsForm(request.POST, instance=user_creds)
         if form.is_valid():
             form.save()
             logout_sdk_for_user(request.user, request=request)
+            if 'sdk_auto_auth_failed' in request.session:
+                del request.session['sdk_auto_auth_failed']
             messages.success(request, "Credentials updated successfully! Please reauthenticate the trading session.")
             return redirect('index')
     else:
         form = UserNeoCredentialsForm(instance=user_creds)
     
-    return render(request, 'trades/credentials.html', {'form': form, 'has_credentials': True})
+    return render(request, 'trades/credentials.html', {
+        'form': form, 
+        'has_credentials': True,
+        'allow_direct_secret_auth': plat_settings.allow_direct_secret_auth
+    })
 
 
 @login_required_with_session_check
@@ -621,8 +653,22 @@ def admin_settings_view(request):
         settings_obj.use_tls = request.POST.get('use_tls') == 'on'
         settings_obj.enable_password_reset = request.POST.get('enable_password_reset') == 'on'
         settings_obj.enable_registration_otp = request.POST.get('enable_registration_otp') == 'on'
+        settings_obj.enable_order_notifications = request.POST.get('enable_order_notifications') == 'on'
         settings_obj.host_user = request.POST.get('host_user', '')
         settings_obj.from_address = request.POST.get('from_address', '')
+        settings_obj.from_name = request.POST.get('from_name', 'JK Terminal')
+        
+        # Save email templates
+        settings_obj.otp_subject = request.POST.get('otp_subject', '')
+        settings_obj.otp_template = request.POST.get('otp_template', '')
+        settings_obj.password_changed_subject = request.POST.get('password_changed_subject', '')
+        settings_obj.password_changed_template = request.POST.get('password_changed_template', '')
+        settings_obj.forgot_password_subject = request.POST.get('forgot_password_subject', '')
+        settings_obj.forgot_password_template = request.POST.get('forgot_password_template', '')
+        settings_obj.order_placed_subject = request.POST.get('order_placed_subject', '')
+        settings_obj.order_placed_template = request.POST.get('order_placed_template', '')
+        settings_obj.order_status_subject = request.POST.get('order_status_subject', '')
+        settings_obj.order_status_template = request.POST.get('order_status_template', '')
         
         new_password = request.POST.get('host_password', '')
         if new_password:
@@ -633,6 +679,7 @@ def admin_settings_view(request):
         platform_settings.session_timeout_enabled = request.POST.get('session_timeout_enabled') == 'on'
         platform_settings.sdk_timeout_enabled = request.POST.get('sdk_timeout_enabled') == 'on'
         platform_settings.enable_user_registration = request.POST.get('enable_user_registration') == 'on'
+        platform_settings.allow_direct_secret_auth = request.POST.get('allow_direct_secret_auth') == 'on'
         try:
             platform_settings.session_timeout_seconds = int(request.POST.get('session_timeout_seconds', 300))
             platform_settings.sdk_timeout_seconds = int(request.POST.get('sdk_timeout_seconds', 1800))
@@ -674,6 +721,118 @@ def admin_settings_view(request):
         'active_sessions': active_sessions,
         'registration_form': registration_form
     })
+
+
+@login_required_with_session_check
+def admin_test_smtp_view(request):
+    """Test SMTP settings by sending a test email (Superuser only)"""
+    if not request.user.is_superuser:
+        return JsonResponse({'status': 'error', 'message': 'Access denied. Superuser only.'}, status=403)
+    
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Only POST method is allowed.'}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON body.'}, status=400)
+    
+    host = data.get('host')
+    port = data.get('port')
+    use_tls = data.get('use_tls') is True or data.get('use_tls') == 'on' or data.get('use_tls') == 'true'
+    host_user = data.get('host_user', '')
+    from_address = data.get('from_address', '')
+    test_recipient = data.get('test_recipient', '').strip()
+    host_password = data.get('host_password', '')
+
+    if not host or not port or not host_user:
+        return JsonResponse({'status': 'error', 'message': 'SMTP Host, Port, and Logon User are required fields.'}, status=400)
+
+    if not test_recipient:
+        test_recipient = request.user.email
+        if not test_recipient:
+            return JsonResponse({'status': 'error', 'message': 'Please specify a recipient email address.'}, status=400)
+
+    try:
+        port = int(port)
+    except ValueError:
+        return JsonResponse({'status': 'error', 'message': 'Port must be a valid integer.'}, status=400)
+
+    # If no password is provided in the test request, use the saved/decrypted one
+    if not host_password:
+        settings_obj = SMTPSettings.get_settings()
+        host_password = settings_obj.get_decrypted_password()
+        if not host_password:
+            return JsonResponse({'status': 'error', 'message': 'No password provided or saved.'}, status=400)
+
+    try:
+        settings_obj = SMTPSettings.get_settings()
+        settings_obj.host = host
+        settings_obj.port = port
+        settings_obj.host_user = host_user
+        settings_obj.from_address = from_address
+        
+        from django.core.mail import get_connection
+        connection = get_connection(
+            host=host,
+            port=port,
+            username=host_user,
+            password=host_password,
+            use_tls=use_tls,
+            timeout=10
+        )
+        
+        test_subject = "JK Terminal - SMTP Test Connection"
+        test_template = """<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f5f7; margin: 0; padding: 0; color: #1e293b; }
+    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; padding: 32px 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+    .content { padding: 32px 24px; line-height: 1.6; }
+    .footer { text-align: center; padding: 24px; font-size: 12px; color: #64748b; background-color: #f8fafc; border-top: 1px solid #f1f5f9; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>JK Terminal</h1>
+    </div>
+    <div class="content">
+      <p>Hello,</p>
+      <p>This is a test email sent from JK Terminal to verify your SMTP settings. If you received this, your SMTP configuration is correct!</p>
+      <p>Regards,<br>JK Terminal Team</p>
+    </div>
+    <div class="footer">
+      This is an automated notification from JK Terminal. Please do not reply to this email.
+    </div>
+  </div>
+</body>
+</html>"""
+
+        email_msg = settings_obj.send_html_email(
+            subject_template=test_subject,
+            body_template=test_template,
+            context_dict={},
+            to_emails=[test_recipient],
+            connection=connection
+        )
+        email_msg.send(fail_silently=False)
+        return JsonResponse({
+            'status': 'success', 
+            'message': f'Test email sent successfully to {test_recipient}!'
+        })
+    except Exception as e:
+        import traceback
+        error_detail = str(e)
+        logger.error(f"SMTP Test failed: {error_detail}\n{traceback.format_exc()}")
+        return JsonResponse({
+            'status': 'error', 
+            'message': f'Failed to send test email: {error_detail}'
+        }, status=500)
+
 
 # ==================== User Management Views (Superuser Only) ====================
 
@@ -791,7 +950,7 @@ def send_password_change_confirmation_email(user):
         return
         
     try:
-        from django.core.mail import get_connection, EmailMessage
+        from django.core.mail import get_connection
         connection = get_connection(
             host=settings_obj.host,
             port=settings_obj.port,
@@ -799,12 +958,11 @@ def send_password_change_confirmation_email(user):
             password=settings_obj.get_decrypted_password(),
             use_tls=settings_obj.use_tls
         )
-        from_addr = settings_obj.from_address if settings_obj.from_address else settings_obj.host_user
-        email_msg = EmailMessage(
-            subject="JK Terminal - Password Changed Successfully",
-            body=f"Hello {user.username},\n\nYour password has been successfully changed.\n\nIf you did not authorize this change, please contact an administrator immediately.\n\nThank you.",
-            from_email=from_addr,
-            to=[user.email],
+        email_msg = settings_obj.send_html_email(
+            subject_template=settings_obj.password_changed_subject,
+            body_template=settings_obj.password_changed_template,
+            context_dict={'username': user.username},
+            to_emails=[user.email],
             connection=connection
         )
         email_msg.send(fail_silently=False)
@@ -831,9 +989,8 @@ def forgot_password_view(request):
             if user:
                 temp_password = generate_temp_password()
                 
-                # Send email FIRST to ensure no lockout on failure
                 try:
-                    from django.core.mail import get_connection, EmailMessage
+                    from django.core.mail import get_connection
                     connection = get_connection(
                         host=settings_obj.host,
                         port=settings_obj.port,
@@ -841,12 +998,11 @@ def forgot_password_view(request):
                         password=settings_obj.get_decrypted_password(),
                         use_tls=settings_obj.use_tls
                     )
-                    from_addr = settings_obj.from_address if settings_obj.from_address else settings_obj.host_user
-                    email_msg = EmailMessage(
-                        subject="JK Terminal - Temporary Password",
-                        body=f"Hello {user.username},\n\nYour temporary password is: {temp_password}\n\nPlease login using this password. You will be asked to set a new permanent password immediately.\n\nThank you.",
-                        from_email=from_addr,
-                        to=[user.email],
+                    email_msg = settings_obj.send_html_email(
+                        subject_template=settings_obj.forgot_password_subject,
+                        body_template=settings_obj.forgot_password_template,
+                        context_dict={'username': user.username, 'temp_password': temp_password},
+                        to_emails=[user.email],
                         connection=connection
                     )
                     email_msg.send(fail_silently=False)
@@ -1347,7 +1503,7 @@ def place_trade_ajax(request):
                 return JsonResponse({'status': 'reauth_required', 'message': 'Trade session expired. Please reauthenticate.'}, status=401)
             return JsonResponse({'status': 'error', 'message': f"Margin check failed: {margin_response['error']}"}, status=400)
 
-        margin_data = margin_response.get('data', {}) if isinstance(margin_response, dict) else {}
+        margin_data = margin_response.get('data', margin_response) if isinstance(margin_response, dict) else {}
         insuf_fund = float(margin_data.get('insufFund', '0') or '0')
         rms_validated = str(margin_data.get('rmsVldtd', '')).upper()
 
@@ -1375,7 +1531,6 @@ def place_trade_ajax(request):
         if 'errMsg' in api_response:
             logger.warning(f"Trade failed for '{request.user.username}': {api_response['errMsg']}")
             return JsonResponse({'status': 'error', 'message': api_response['errMsg']}, status=400)
-        
         order_id = api_response.get('nOrdNo', 'N/A')
         logger.info(f"Trade placed successfully for '{request.user.username}'. Order ID: {order_id}")
         return JsonResponse({'status': 'success', 'message': f"Trade placed successfully! Order ID: {order_id}", 'data': api_response})
@@ -1576,19 +1731,29 @@ def index(request):
         return redirect('setup_credentials')
 
     try:
+        api = KotakNeoAPI(user=request.user, session_id=request.session.session_key)
+    except Exception as e:
+        messages.error(request, f"Error initializing API: {str(e)}")
+        return redirect('setup_credentials')
+
+    try:
         session_activity = SessionActivity.objects.get(session_key=request.session.session_key)
         sdk_active = session_activity.is_sdk_session_valid()
     except SessionActivity.DoesNotExist:
         sdk_active = False
 
     if not sdk_active:
-        messages.warning(request, "Your Neo SDK session is not active or has expired. Please reauthenticate.")
+        # Try to auto-authenticate if using direct secret auth
+        plat_settings = PlatformSettings.get_settings()
+        if user_creds.auth_mode == 'secret' and plat_settings.allow_direct_secret_auth and not request.session.get('sdk_auto_auth_failed'):
+            auth_result = api.authenticate(force_refresh=True)
+            if auth_result.get('status') == 'success':
+                sdk_active = True
+            else:
+                request.session['sdk_auto_auth_failed'] = True
 
-    try:
-        api = KotakNeoAPI(user=request.user, session_id=request.session.session_key)
-    except Exception as e:
-        messages.error(request, f"Error initializing API: {str(e)}")
-        return redirect('setup_credentials')
+    if not sdk_active:
+        messages.warning(request, "Your Neo SDK session is not active or has expired. Please reauthenticate.")
 
     sdk_expires_at = None
     if sdk_active:
@@ -1859,6 +2024,21 @@ def check_sdk_status(request):
     api = KotakNeoAPI(user=request.user, session_id=request.session.session_key)
     # Check cache directly to avoid any heavy authenticate() calls
     is_hot = api.get_cached_session() is not None
+    
+    # If not authenticated but we have TOTP secret authentication enabled, try to authenticate automatically
+    if not is_hot and not request.session.get('sdk_auto_auth_failed'):
+        from trades.models import PlatformSettings, UserNeoCredentials
+        plat_settings = PlatformSettings.get_settings()
+        try:
+            user_creds = UserNeoCredentials.objects.get(user=request.user, is_active=True)
+            if user_creds.auth_mode == 'secret' and plat_settings.allow_direct_secret_auth:
+                auth_result = api.authenticate(force_refresh=True)
+                is_hot = auth_result.get('status') == 'success'
+                if not is_hot:
+                    request.session['sdk_auto_auth_failed'] = True
+        except UserNeoCredentials.DoesNotExist:
+            pass
+            
     return JsonResponse({
         "status": "success",
         "is_authenticated": is_hot

@@ -48,6 +48,12 @@ class LiveQuotesConsumer(WebsocketConsumer):
         if not self.ws_group_key or not self.ws_session_id: return False
         return USER_WS_STATE[self.ws_group_key]['master_session'] == self.ws_session_id
 
+    def send(self, text_data=None, bytes_data=None, close=False):
+        try:
+            super().send(text_data, bytes_data, close)
+        except Exception as e:
+            logger.info(f"Failed to send WS message on {self.ws_session_id} (likely disconnected): {e}")
+
     def connect(self):
         self.ws_session_id = f"WS-{str(uuid.uuid4())[:8]}"
         request_id_var.set(self.ws_session_id)
@@ -167,6 +173,22 @@ class LiveQuotesConsumer(WebsocketConsumer):
                 self.handle_subscribe(params, is_subscribe=True)
             elif action == 'unsubscribe':
                 self.handle_subscribe(params, is_subscribe=False)
+            elif action == 'subscribe_depth':
+                token = params.get('instrument_token')
+                exch = params.get('exchange_segment')
+                if token and exch:
+                    self.handle_subscribe({
+                        'instrument_tokens': [{'instrument_token': token, 'exchange_segment': exch}],
+                        'isDepth': True
+                    }, is_subscribe=True)
+            elif action == 'unsubscribe_depth':
+                token = params.get('instrument_token')
+                exch = params.get('exchange_segment')
+                if token and exch:
+                    self.handle_subscribe({
+                        'instrument_tokens': [{'instrument_token': token, 'exchange_segment': exch}],
+                        'isDepth': True
+                    }, is_subscribe=False)
             elif action == 'set_visibility':
                 self.handle_visibility(params.get('visible', True))
             elif action == 'claim_master':
@@ -209,13 +231,9 @@ class LiveQuotesConsumer(WebsocketConsumer):
             
             if self.is_master() and hasattr(self.api, 'subscribe'):
                 if is_subscribe:
-                    self.api.subscribe(instruments, on_message=self.on_quote, isIndex=isIndex, isDepth=False)
-                    if isDepth:
-                        self.api.subscribe(instruments, on_message=self.on_quote, isIndex=isIndex, isDepth=True)
+                    self.api.subscribe(instruments, on_message=self.on_quote, isIndex=isIndex, isDepth=isDepth)
                 else:
-                    self.api.unsubscribe(instruments, isIndex=isIndex, isDepth=False)
-                    if isDepth:
-                        self.api.unsubscribe(instruments, isIndex=isIndex, isDepth=True)
+                    self.api.unsubscribe(instruments, isIndex=isIndex, isDepth=isDepth)
 
     def handle_visibility(self, is_visible):
         with ws_state_lock:
