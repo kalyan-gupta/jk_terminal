@@ -29,6 +29,7 @@ urlpatterns = [
     path('admin-settings/user/<int:user_id>/reset-password/', views.admin_reset_user_password, name='admin_reset_user_password'),
     path('admin-settings/user/add/', views.admin_add_user_view, name='admin_add_user'),
     path('admin-settings/session/<int:session_id>/delete/', views.admin_delete_session, name='admin_delete_session'),
+    path('admin-settings/sessions/bulk-delete/', views.admin_bulk_delete_sessions, name='admin_bulk_delete_sessions'),
     
     # Trading URLs (Protected)
     path('', views.index, name='index'),

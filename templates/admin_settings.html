@@ -10,15 +10,6 @@
             <p class="mb-2">Manage global configurations for JK Terminal (Superuser Only)</p>
         </div>
         
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
-        
         <div class="card mb-4">
             <div class="card-header">
                 <h5 class="mb-0"><i class="bi bi-toggles me-2"></i>Feature Configuration</h5>
@@ -387,17 +378,48 @@
                     </table>
                 </div>
             </div>
+        </div>
+
         <div class="card mt-4">
-            <div class="card-header">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-3">
                 <h5 class="mb-0"><i class="bi bi-broadcast me-2"></i>Active User Sessions</h5>
+                <!-- Search Filter Input -->
+                <div class="input-group input-group-sm" style="max-width: 300px;">
+                    <span class="input-group-text bg-light text-muted"><i class="bi bi-search"></i></span>
+                    <input type="text" id="sessionSearch" class="form-control" placeholder="Search by user or IP...">
+                </div>
             </div>
             <div class="card-body p-0">
-                <p class="text-muted small px-4 pt-3 mb-2">These are current active browser sessions. Terminating a session will immediately log out the user from that browser/tab.</p>
+                <div class="px-4 pt-3 pb-3 d-flex flex-wrap align-items-center justify-content-between gap-3 bg-light border-bottom">
+                    <p class="text-muted small mb-0">These are current active browser sessions. Terminating a session will immediately log out the user from that browser/tab.</p>
+                    
+                    <!-- Bulk Action Controls -->
+                    <div class="d-flex align-items-center gap-2">
+                        <form method="post" action="{% url 'admin_bulk_delete_sessions' %}" id="bulkSessionForm" class="d-flex align-items-center gap-2 m-0">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" id="bulkActionInput" value="">
+                            
+                            <button type="button" class="btn btn-sm btn-outline-danger" id="btnTerminateSelected" disabled>
+                                <i class="bi bi-dash-circle me-1"></i> Terminate Selected (<span id="selectedCount">0</span>)
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-warning" id="btnTerminateInactiveSDK">
+                                <i class="bi bi-shield-slash me-1"></i> Terminate SDK Inactive
+                            </button>
+                            <button type="button" class="btn btn-sm btn-danger" id="btnTerminateAllOthers">
+                                <i class="bi bi-x-octagon-fill me-1"></i> Terminate All Others
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
+                    <table class="table table-hover align-middle mb-0" id="sessionsTable">
                         <thead class="table-light">
                             <tr>
-                                <th class="ps-4">User</th>
+                                <th class="ps-4" style="width: 40px;">
+                                    <input type="checkbox" class="form-check-input" id="selectAllSessions">
+                                </th>
+                                <th>User</th>
                                 <th>IP Address</th>
                                 <th>Last Activity</th>
                                 <th>SDK Status</th>
@@ -406,8 +428,15 @@
                         </thead>
                         <tbody>
                             {% for session in active_sessions %}
-                            <tr {% if session.session_key == request.session.session_key %}class="table-primary opacity-75"{% endif %}>
+                            <tr {% if session.session_key == request.session.session_key %}class="table-primary opacity-75"{% endif %} data-username="{{ session.user.username|lower }}" data-fullname="{{ session.user.get_full_name|lower }}" data-ip="{{ session.ip_address|default:"" }}">
                                 <td class="ps-4">
+                                    {% if session.session_key != request.session.session_key %}
+                                        <input type="checkbox" class="form-check-input session-checkbox" name="session_ids" value="{{ session.id }}" form="bulkSessionForm">
+                                    {% else %}
+                                        <input type="checkbox" class="form-check-input" disabled title="Cannot terminate current session">
+                                    {% endif %}
+                                </td>
+                                <td>
                                     <div class="fw-medium">{{ session.user.username }}</div>
                                     <div class="text-muted small">{{ session.user.get_full_name|default:"" }}</div>
                                 </td>
@@ -438,7 +467,7 @@
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="5" class="text-center py-4 text-muted">No active sessions found.</td>
+                                <td colspan="6" class="text-center py-4 text-muted">No active sessions found.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -541,4 +570,106 @@
         </div>
     </div>
 
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Session search filter
+    const sessionSearchInput = document.getElementById('sessionSearch');
+    const sessionsTable = document.getElementById('sessionsTable');
+    const sessionRows = sessionsTable ? sessionsTable.querySelectorAll('tbody tr') : [];
+
+    if (sessionSearchInput) {
+        sessionSearchInput.addEventListener('input', function() {
+            const query = this.value.toLowerCase().trim();
+            sessionRows.forEach(row => {
+                const username = row.getAttribute('data-username') || '';
+                const fullname = row.getAttribute('data-fullname') || '';
+                const ip = row.getAttribute('data-ip') || '';
+                
+                if (username.includes(query) || fullname.includes(query) || ip.includes(query)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+    }
+
+    // Checkbox and selection management
+    const selectAllCheckbox = document.getElementById('selectAllSessions');
+    const sessionCheckboxes = document.querySelectorAll('.session-checkbox');
+    const btnTerminateSelected = document.getElementById('btnTerminateSelected');
+    const selectedCountSpan = document.getElementById('selectedCount');
+    const bulkSessionForm = document.getElementById('bulkSessionForm');
+    const bulkActionInput = document.getElementById('bulkActionInput');
+
+    function updateSelectedCount() {
+        const checkedCount = document.querySelectorAll('.session-checkbox:checked').length;
+        if (selectedCountSpan) {
+            selectedCountSpan.textContent = checkedCount;
+        }
+        if (btnTerminateSelected) {
+            btnTerminateSelected.disabled = checkedCount === 0;
+        }
+    }
+
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            sessionCheckboxes.forEach(cb => {
+                // Only toggle if the row is visible
+                const row = cb.closest('tr');
+                if (row && row.style.display !== 'none') {
+                    cb.checked = this.checked;
+                }
+            });
+            updateSelectedCount();
+        });
+    }
+
+    sessionCheckboxes.forEach(cb => {
+        cb.addEventListener('change', updateSelectedCount);
+    });
+
+    // Bulk Terminate Selected Action
+    const btnTerminateSelectedEl = document.getElementById('btnTerminateSelected');
+    if (btnTerminateSelectedEl) {
+        btnTerminateSelectedEl.addEventListener('click', function() {
+            const checkedCount = document.querySelectorAll('.session-checkbox:checked').length;
+            if (confirm(`Are you sure you want to terminate the ${checkedCount} selected session(s)?`)) {
+                if (bulkActionInput && bulkSessionForm) {
+                    bulkActionInput.value = 'delete_selected';
+                    bulkSessionForm.submit();
+                }
+            }
+        });
+    }
+
+    // Terminate Inactive SDK Action
+    const btnTerminateInactiveSDKEl = document.getElementById('btnTerminateInactiveSDK');
+    if (btnTerminateInactiveSDKEl) {
+        btnTerminateInactiveSDKEl.addEventListener('click', function() {
+            if (confirm('Are you sure you want to terminate ALL sessions where SDK is Inactive? This will log out the users from those browsers.')) {
+                if (bulkActionInput && bulkSessionForm) {
+                    bulkActionInput.value = 'delete_inactive_sdk';
+                    bulkSessionForm.submit();
+                }
+            }
+        });
+    }
+
+    // Terminate All Others Action
+    const btnTerminateAllOthersEl = document.getElementById('btnTerminateAllOthers');
+    if (btnTerminateAllOthersEl) {
+        btnTerminateAllOthersEl.addEventListener('click', function() {
+            if (confirm('Are you sure you want to terminate ALL sessions except your current session? This will log out all other active users immediately.')) {
+                if (bulkActionInput && bulkSessionForm) {
+                    bulkActionInput.value = 'delete_all_except_current';
+                    bulkSessionForm.submit();
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
 {% endblock %}
