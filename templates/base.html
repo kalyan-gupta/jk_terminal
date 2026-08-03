@@ -16,6 +16,7 @@
         (function() {
             const savedTheme = localStorage.getItem('app-theme') || 'light';
             document.documentElement.setAttribute('data-theme', savedTheme);
+            document.documentElement.setAttribute('data-bs-theme', savedTheme === 'glass' ? 'dark' : savedTheme);
         })();
     </script>
     
@@ -141,32 +142,34 @@
     
     <!-- Shared Theme Toggler -->
     <script>
-        function cycleTheme() {
-            const themes = ['light', 'dark', 'glass'];
-            let currentTheme = localStorage.getItem('app-theme') || 'light';
-            let nextIndex = (themes.indexOf(currentTheme) + 1) % themes.length;
-            let nextTheme = themes[nextIndex];
-            
-            document.documentElement.setAttribute('data-theme', nextTheme);
-            localStorage.setItem('app-theme', nextTheme);
-            updateThemeIcon(nextTheme);
-        }
+        (function() {
+            const themeIcons = {
+                'light': 'bi-sun-fill',
+                'dark': 'bi-moon-fill',
+                'glass': 'bi-sparkles'
+            };
 
-        function updateThemeIcon(theme) {
-            const icon = document.getElementById('theme-toggle-icon');
-            if (!icon) return;
-            icon.className = 'bi fs-5';
-            if (theme === 'light') {
-                icon.classList.add('bi-sun-fill');
-            } else if (theme === 'dark') {
-                icon.classList.add('bi-moon-fill');
-            } else {
-                icon.classList.add('bi-layers-fill');
-            }
-        }
-        
-        // Init icon
-        updateThemeIcon(localStorage.getItem('app-theme') || 'light');
+            window.applyTheme = function(theme) {
+                document.documentElement.setAttribute('data-theme', theme);
+                document.documentElement.setAttribute('data-bs-theme', theme === 'glass' ? 'dark' : theme);
+                localStorage.setItem('app-theme', theme);
+                const iconEl = document.getElementById('theme-toggle-icon');
+                if (iconEl) {
+                    iconEl.className = 'bi ' + themeIcons[theme] + ' fs-5';
+                }
+            };
+
+            window.cycleTheme = function() {
+                const themes = ['light', 'dark', 'glass'];
+                let currentTheme = localStorage.getItem('app-theme') || 'light';
+                let nextIndex = (themes.indexOf(currentTheme) + 1) % themes.length;
+                let nextTheme = themes[nextIndex];
+                window.applyTheme(nextTheme);
+            };
+
+            // Init icon
+            window.applyTheme(localStorage.getItem('app-theme') || 'light');
+        })();
     </script>
     
     {% block scripts %}{% endblock %}

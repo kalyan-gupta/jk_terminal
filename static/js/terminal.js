@@ -1,32 +1,5 @@
-// Theme Engine Configuration
-        const themes = ['light', 'dark', 'glass'];
-        const themeIcons = {
-            'light': 'bi-sun-fill',
-            'dark': 'bi-moon-fill',
-            'glass': 'bi-sparkles'
-        };
+// Theme logic is managed globally by base.html
 
-        window.applyTheme = function(theme) {
-            document.documentElement.setAttribute('data-theme', theme);
-            localStorage.setItem('app-theme', theme);
-            const iconEl = document.getElementById('theme-toggle-icon');
-            if (iconEl) {
-                iconEl.className = 'bi ' + themeIcons[theme] + ' fs-5';
-            }
-        };
-
-        window.cycleTheme = function() {
-            let currentTheme = localStorage.getItem('app-theme') || 'light';
-            let nextIndex = (themes.indexOf(currentTheme) + 1) % themes.length;
-            let nextTheme = themes[nextIndex];
-            window.applyTheme(nextTheme);
-        };
-
-        // Initialize Theme Icons on Page Load
-        document.addEventListener('DOMContentLoaded', () => {
-            const currentTheme = localStorage.getItem('app-theme') || 'light';
-            window.applyTheme(currentTheme);
-        });
 
         // Use data attributes to avoid IDE parsing errors with template variables in JS
         const settingsData = document.getElementById('platform-settings-data').dataset;
