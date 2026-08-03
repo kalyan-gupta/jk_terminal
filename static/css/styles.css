@@ -670,13 +670,35 @@
         .oc-action-icons { display: flex; gap: 0.3rem; justify-content: center; align-items: center; }
         .oc-select-btn { 
             width: 32px; height: 32px; padding: 0; display: flex; 
-            align-items: center; justify-content: center; border-radius: 6px;
-            transition: all 0.2s;
+            align-items: center; justify-content: center; border-radius: 8px;
+            border: 1px solid var(--border-color) !important;
+            background: transparent !important;
+            color: var(--text-secondary) !important;
+            transition: all 0.2s ease-in-out;
         }
-        .oc-select-btn.active { background: #fd7e14; color: white; border-color: #fd7e14; }
-        .oc-btn-basket { color: #fd7e14; border-color: #fd7e14; }
-        
-        .oc-btn-basket:hover { background: #fff4e6; color: #d9480f; }
+        .oc-select-btn i {
+            font-size: 1rem;
+            color: inherit;
+        }
+        .oc-btn-trade:hover {
+            background: rgba(68, 157, 255, 0.12) !important;
+            border-color: var(--accent-color) !important;
+            color: var(--accent-color) !important;
+        }
+        .oc-btn-basket {
+            border-color: var(--border-color) !important;
+            color: var(--text-secondary) !important;
+        }
+        .oc-btn-basket:hover {
+            background: rgba(253, 126, 20, 0.12) !important;
+            border-color: #fd7e14 !important;
+            color: #fd7e14 !important;
+        }
+        .oc-btn-basket.active {
+            background: #fd7e14 !important;
+            border-color: #fd7e14 !important;
+            color: #ffffff !important;
+        }
         
         /* Unified Sticky Header */
         .oc-sticky-header {
