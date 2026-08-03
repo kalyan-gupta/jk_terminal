@@ -1186,7 +1186,7 @@
         }
 
         // System Diagnostics Functions
-        function updateDiagSummary(isSdkAuth) {
+        window.updateDiagSummary = function(isSdkAuth) {
             const dot = document.getElementById('diag-pulse-dot');
             const text = document.getElementById('diag-summary-text');
             const btn = document.getElementById('diagnostics-btn');
@@ -1194,20 +1194,29 @@
             
             let wsActive = typeof tradeSocket !== 'undefined' && tradeSocket && tradeSocket.readyState === WebSocket.OPEN;
             
+            dot.className = 'pulse-dot';
+            dot.removeAttribute('style'); // Remove inline style override so CSS classes work
+
             if (isSdkAuth && wsActive) {
-                dot.style.backgroundColor = '#198754'; // success green
-                text.textContent = 'API Connected';
-                btn.className = 'btn btn-sm dropdown-toggle d-flex align-items-center gap-1 border border-success text-success bg-transparent';
+                if (window.isFeedPaused) {
+                    dot.classList.add('pulse-yellow');
+                    text.textContent = 'Feed Paused';
+                    btn.className = 'btn btn-sm dropdown-toggle d-flex align-items-center gap-1 border border-warning text-warning bg-transparent';
+                } else {
+                    dot.classList.add('pulse-green');
+                    text.textContent = 'API Connected';
+                    btn.className = 'btn btn-sm dropdown-toggle d-flex align-items-center gap-1 border border-success text-success bg-transparent';
+                }
             } else if (isSdkAuth) {
-                dot.style.backgroundColor = '#ffc107'; // warning yellow
+                dot.classList.add('pulse-yellow');
                 text.textContent = 'No Live Feed';
                 btn.className = 'btn btn-sm dropdown-toggle d-flex align-items-center gap-1 border border-warning text-warning bg-transparent';
             } else {
-                dot.style.backgroundColor = '#dc3545'; // danger red
+                dot.classList.add('pulse-red');
                 text.textContent = 'SDK Inactive';
                 btn.className = 'btn btn-sm dropdown-toggle d-flex align-items-center gap-1 border border-danger text-danger bg-transparent';
             }
-        }
+        };
 
         window.checkDiagnostics = function() {
             // Check WebSocket status
@@ -1223,8 +1232,13 @@
                             wsStatusEl.className = 'badge bg-warning-subtle text-warning-emphasis border border-warning-subtle';
                             break;
                         case WebSocket.OPEN:
-                            wsStatusEl.textContent = 'Live Feed Active';
-                            wsStatusEl.className = 'badge bg-success-subtle text-success-emphasis border border-success-subtle';
+                            if (window.isFeedPaused) {
+                                wsStatusEl.textContent = 'Feed Paused';
+                                wsStatusEl.className = 'badge bg-warning-subtle text-warning-emphasis border border-warning-subtle';
+                            } else {
+                                wsStatusEl.textContent = 'Live Feed Active';
+                                wsStatusEl.className = 'badge bg-success-subtle text-success-emphasis border border-success-subtle';
+                            }
                             break;
                         case WebSocket.CLOSING:
                             wsStatusEl.textContent = 'Closing...';

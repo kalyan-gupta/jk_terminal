@@ -274,12 +274,109 @@
             box-shadow: 0 0 0 rgba(13, 202, 240, 0.4);
             animation: pulse 2s infinite;
             vertical-align: middle;
+            transition: all 0.3s ease;
+        }
+
+        .pulse-dot.pulse-green {
+            background-color: #198754;
+            box-shadow: 0 0 0 rgba(25, 135, 84, 0.4);
+            animation: pulse-green 2s infinite;
+        }
+        .pulse-dot.pulse-yellow {
+            background-color: #ffc107;
+            box-shadow: 0 0 0 rgba(255, 193, 7, 0.4);
+            animation: pulse-yellow 2s infinite;
+        }
+        .pulse-dot.pulse-red {
+            background-color: #dc3545;
+            box-shadow: 0 0 0 rgba(220, 53, 69, 0.4);
+            animation: pulse-red 2s infinite;
         }
 
         @keyframes pulse {
             0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(13, 202, 240, 0.7); }
             70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(13, 202, 240, 0); }
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(13, 202, 240, 0); }
+        }
+        @keyframes pulse-green {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(25, 135, 84, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0); }
+        }
+        @keyframes pulse-yellow {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(255, 193, 7, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
+        }
+        @keyframes pulse-red {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(220, 53, 69, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+        }
+
+        #resume-feed-nav-btn {
+            border-radius: 12px;
+            padding: 3px 10px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            animation: button-pulse 2s infinite;
+            border: 1px solid rgba(255, 193, 7, 0.4);
+            background: rgba(255, 193, 7, 0.12) !important;
+            color: #ffc107 !important;
+            transition: all 0.2s ease-in-out;
+        }
+        #resume-feed-nav-btn:hover {
+            transform: translateY(-1px);
+            background: #ffc107 !important;
+            color: #212529 !important;
+            border-color: #ffc107;
+        }
+
+        #basket-nav-btn, #theme-toggle-btn {
+            background: rgba(255, 255, 255, 0.03) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            border-radius: 50% !important;
+            width: 38px;
+            height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            box-shadow: none !important;
+            padding: 0 !important;
+        }
+
+        #basket-nav-btn i, #theme-toggle-btn i {
+            color: #f8fafc !important;
+            opacity: 0.75;
+            transition: all 0.2s ease;
+        }
+
+        #basket-nav-btn:hover, #theme-toggle-btn:hover {
+            background-color: rgba(255, 255, 255, 0.08) !important;
+            border-color: var(--accent-color) !important;
+            transform: translateY(-1px);
+        }
+
+        #basket-nav-btn:hover i, #theme-toggle-btn:hover i {
+            color: var(--accent-color) !important;
+            opacity: 1;
+        }
+
+        #basket-nav-btn #basket-badge {
+            top: 2px !important;
+            right: 2px !important;
+            transform: translate(25%, -25%) !important;
+            font-size: 0.65rem;
+            padding: 3px 6px;
+        }
+
+        @keyframes button-pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.3); }
+            70% { box-shadow: 0 0 0 6px rgba(255, 193, 7, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
         }
 
         /* Modern Trade Card Styles */

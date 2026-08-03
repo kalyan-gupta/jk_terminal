@@ -721,12 +721,15 @@
                             window.isFeedPaused = true;
                             const resumeBtn = document.getElementById('resume-feed-nav-btn');
                             if (resumeBtn) resumeBtn.style.display = 'block';
+                            if (typeof window.updateDiagSummary === 'function') window.updateDiagSummary(window.isSDKAuthenticated);
+                            if (typeof window.checkDiagnostics === 'function') window.checkDiagnostics();
                         }, 500);
                     } else if (incoming_data.type === 'feed_paused') {
                         window.isFeedPaused = true;
                         const resumeBtn = document.getElementById('resume-feed-nav-btn');
                         if (resumeBtn) resumeBtn.style.display = 'block';
-                        showNotification(incoming_data.message, 'warning');
+                        if (typeof window.updateDiagSummary === 'function') window.updateDiagSummary(window.isSDKAuthenticated);
+                        if (typeof window.checkDiagnostics === 'function') window.checkDiagnostics();
                     } else if (incoming_data.type === 'status') {
                         // Clear any pending conflict popup
                         if (window.conflictModalTimeout) {
@@ -745,7 +748,6 @@
                             if (modalInstance) modalInstance.hide();
                         }
                         
-                        
                         // Re-sync all active subscriptions
                         if (document.getElementById('holdings-tab')?.classList.contains('active')) {
                             manageTableSubscriptions('holdings-table', true);
@@ -763,7 +765,8 @@
                             });
                         }
 
-                        showNotification(incoming_data.message, 'success');
+                        if (typeof window.updateDiagSummary === 'function') window.updateDiagSummary(window.isSDKAuthenticated);
+                        if (typeof window.checkDiagnostics === 'function') window.checkDiagnostics();
                     }
                 };
 
