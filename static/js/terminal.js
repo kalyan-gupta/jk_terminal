@@ -555,6 +555,25 @@
                     }
                 };
                 
+                // Helper to flash green or red on price change
+                function flashLtp(el, newVal) {
+                    if (!el || !newVal) return;
+                    const oldText = el.textContent || el.innerText;
+                    const oldVal = parseFloat(oldText.replace(/[^\d.]/g, ''));
+                    if (!isNaN(oldVal)) {
+                        const parsedNew = parseFloat(newVal);
+                        if (parsedNew > oldVal) {
+                            el.classList.remove('flash-green', 'flash-red');
+                            void el.offsetWidth;
+                            el.classList.add('flash-green');
+                        } else if (parsedNew < oldVal) {
+                            el.classList.remove('flash-green', 'flash-red');
+                            void el.offsetWidth;
+                            el.classList.add('flash-red');
+                        }
+                    }
+                }
+
                 tradeSocket.onmessage = function(e) {
                     const incoming_data = JSON.parse(e.data);
                     
@@ -570,6 +589,7 @@
                                 currentUnderlyingLtp = parseFloat(quote.ltp);
                                 const badge = document.getElementById('oc-underlying-ltp');
                                 if (badge && !isNaN(currentUnderlyingLtp)) {
+                                    flashLtp(badge, currentUnderlyingLtp);
                                     badge.textContent = `LTP: ₹${currentUnderlyingLtp.toFixed(2)}`;
                                     if (typeof updateATMHighlight === 'function') updateATMHighlight();
                                 }
@@ -579,6 +599,7 @@
                             if (currentOCTokens.has(instrumentSymbol)) {
                                 const ocLtpEl = document.getElementById(`oc-ltp-${instrumentSymbol}`);
                                 if (ocLtpEl && quote.ltp) {
+                                    flashLtp(ocLtpEl, quote.ltp);
                                     ocLtpEl.textContent = `₹${parseFloat(quote.ltp).toFixed(2)}`;
                                 }
                             }
@@ -587,6 +608,7 @@
                             if (currentBasketTokens.has(instrumentSymbol)) {
                                 const bLtpEl = document.getElementById(`basket-ltp-${instrumentSymbol}`);
                                 if (bLtpEl && quote.ltp) {
+                                    flashLtp(bLtpEl, quote.ltp);
                                     bLtpEl.textContent = `LTP: ₹${parseFloat(quote.ltp).toFixed(2)}`;
                                 }
                             }
@@ -595,6 +617,7 @@
                             const hLtpCell = document.getElementById(`ltp-${instrumentSymbol}`);
                             if (hLtpCell && quote.ltp) {
                                 const lastPrice = parseFloat(quote.ltp);
+                                flashLtp(hLtpCell, lastPrice);
                                 hLtpCell.innerText = `₹${lastPrice.toFixed(2)}`;
                                 const pnlCell = document.getElementById(`pnl-${instrumentSymbol}`);
                                 if (pnlCell) {
@@ -613,6 +636,7 @@
                             const pLtpCell = document.getElementById(`pos-ltp-${instrumentSymbol}`);
                             if (pLtpCell && quote.ltp) {
                                 const lastPrice = parseFloat(quote.ltp);
+                                flashLtp(pLtpCell, lastPrice);
                                 pLtpCell.innerText = `₹${lastPrice.toFixed(2)}`;
                                 const pnlCell = document.getElementById(`pos-pnl-${instrumentSymbol}`);
                                 if (pnlCell) {
@@ -638,7 +662,10 @@
                                 const ltpHeader = document.getElementById('order-ltp-badge-text');
                                 if (quote.ltp) {
                                     lastActiveOrderLtp = parseFloat(quote.ltp);
-                                    if (ltpHeader) ltpHeader.textContent = `LTP: ₹${lastActiveOrderLtp.toFixed(2)}`;
+                                    if (ltpHeader) {
+                                        flashLtp(ltpHeader, lastActiveOrderLtp);
+                                        ltpHeader.textContent = `LTP: ₹${lastActiveOrderLtp.toFixed(2)}`;
+                                    }
                                     if (typeof calculateTotal === 'function') calculateTotal();
                                 }
                                 if (quote.depth && document.getElementById('order-depth-section')?.classList.contains('show')) {
