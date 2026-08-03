@@ -24,6 +24,11 @@ django_asgi_app = get_asgi_application()
 from django.contrib.staticfiles.handlers import ASGIStaticFilesHandler
 from trades import routing
 
+class ForceASGIStaticFilesHandler(ASGIStaticFilesHandler):
+    def __init__(self, application):
+        super().__init__(application)
+        self.insecure_serving = True
+
 application = ProtocolTypeRouter({
     "http": django_asgi_app,
     "websocket": AuthMiddlewareStack(
@@ -33,5 +38,5 @@ application = ProtocolTypeRouter({
     ),
 })
 
-application = ASGIStaticFilesHandler(application)
+application = ForceASGIStaticFilesHandler(application)
 
