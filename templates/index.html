@@ -189,13 +189,13 @@
                 <div class="row g-4 text-center">
                     <div class="col-md-3 border-end">
                         <h4 class="small text-uppercase fw-bold text-muted mb-1">Available to Trade</h4>
-                        <p class="h3 fw-bold text-primary">₹{{ limits.available_trade|floatformat:2 }}</p>
+                        <p class="h3 fw-bold text-primary">{% if limits.available_trade is not None and limits.available_trade != "" %}₹{{ limits.available_trade|floatformat:2 }}{% else %}₹--{% endif %}</p>
                         <span class="text-success small"><i class="bi bi-lightning-fill"></i> Net Limit</span>
                     </div>
                     
                     <div class="col-md-3 border-end">
                         <h4 class="small text-uppercase fw-bold text-muted mb-1">Margin Used</h4>
-                        <p class="h4 fw-bold text-danger">₹{{ limits.margin_used|floatformat:2 }}</p>
+                        <p class="h4 fw-bold text-danger">{% if limits.margin_used is not None and limits.margin_used != "" %}₹{{ limits.margin_used|floatformat:2 }}{% else %}₹--{% endif %}</p>
                         <span class="text-muted small">Current utilization</span>
                     </div>
 
@@ -204,14 +204,14 @@
                             Sale Benefit
                             <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="Credits from today's delivery sales available for new trades."></i>
                         </h4>
-                        <p class="h4 fw-bold text-warning">₹{{ limits.unsettled_credit|floatformat:2 }}</p>
+                        <p class="h4 fw-bold text-warning">{% if limits.unsettled_credit is not None and limits.unsettled_credit != "" %}₹{{ limits.unsettled_credit|floatformat:2 }}{% else %}₹--{% endif %}</p>
                         <span class="text-muted small">CNC Sell Credit</span>
                     </div>
 
                     <div class="col-md-3">
                         <h4 class="small text-uppercase fw-bold text-muted mb-1">Account Value</h4>
-                        <p class="h4 fw-bold text-dark">₹{{ limits.total_cash|floatformat:2 }}</p>
-                        <span class="text-muted small">Collateral: ₹{{ limits.collateral|floatformat:2 }}</span>
+                        <p class="h4 fw-bold text-dark">{% if limits.total_cash is not None and limits.total_cash != "" %}₹{{ limits.total_cash|floatformat:2 }}{% else %}₹--{% endif %}</p>
+                        <span class="text-muted small">Collateral: {% if limits.collateral is not None and limits.collateral != "" %}₹{{ limits.collateral|floatformat:2 }}{% else %}₹--{% endif %}</span>
                     </div>
                 </div>
             </div>
@@ -223,12 +223,12 @@
                 <div class="collapse mt-2" id="balanceDetails">
                     <div class="row text-start px-3 py-2 small">
                         <div class="col-6 mb-1">Net Cash Balance:</div>
-                        <div class="col-6 text-end">₹{{ limits.total_cash }}</div>
+                        <div class="col-6 text-end">{% if limits.total_cash is not None and limits.total_cash != "" %}₹{{ limits.total_cash }}{% else %}₹--{% endif %}</div>
                         <div class="col-6 mb-1">Sale Credits (Today):</div>
-                        <div class="col-6 text-end text-success">+ ₹{{ limits.unsettled_credit }}</div>
+                        <div class="col-6 text-end text-success">{% if limits.unsettled_credit is not None and limits.unsettled_credit != "" %}+ ₹{{ limits.unsettled_credit }}{% else %}+ ₹--{% endif %}</div>
                         <div class="col-12"><hr class="my-1"></div>
                         <div class="col-6 fw-bold">Actual Trading Power:</div>
-                        <div class="col-6 text-end fw-bold">₹{{ limits.available_trade }}</div>
+                        <div class="col-6 text-end fw-bold">{% if limits.available_trade is not None and limits.available_trade != "" %}₹{{ limits.available_trade }}{% else %}₹--{% endif %}</div>
                     </div>
                 </div>
             </div>

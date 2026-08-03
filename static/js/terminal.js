@@ -3932,31 +3932,46 @@
             }
 
             function updateLimitsUI(limits) {
+                if (!limits) return;
+
                 // Update the main numbers
                 const primaryPower = document.querySelector('.h3.fw-bold.text-primary');
-                if (primaryPower) primaryPower.textContent = '₹' + parseFloat(limits.available_trade).toFixed(2);
+                if (primaryPower) {
+                    const val = parseFloat(limits.available_trade);
+                    primaryPower.textContent = isNaN(val) ? '₹--' : '₹' + val.toFixed(2);
+                }
                 
                 const dangerMargin = document.querySelector('.h4.fw-bold.text-danger');
-                if (dangerMargin) dangerMargin.textContent = '₹' + parseFloat(limits.margin_used).toFixed(2);
+                if (dangerMargin) {
+                    const val = parseFloat(limits.margin_used);
+                    dangerMargin.textContent = isNaN(val) ? '₹--' : '₹' + val.toFixed(2);
+                }
                 
                 const warningBenefit = document.querySelector('.h4.fw-bold.text-warning');
-                if (warningBenefit) warningBenefit.textContent = '₹' + parseFloat(limits.unsettled_credit).toFixed(2);
+                if (warningBenefit) {
+                    const val = parseFloat(limits.unsettled_credit);
+                    warningBenefit.textContent = isNaN(val) ? '₹--' : '₹' + val.toFixed(2);
+                }
                 
                 const darkValue = document.querySelector('.h4.fw-bold.text-dark');
-                if (darkValue) darkValue.textContent = '₹' + parseFloat(limits.total_cash).toFixed(2);
+                if (darkValue) {
+                    const val = parseFloat(limits.total_cash);
+                    darkValue.textContent = isNaN(val) ? '₹--' : '₹' + val.toFixed(2);
+                }
                 
                 // Update collateral span
                 const collateralSpan = document.querySelector('.text-muted.small:last-of-type');
                 if (collateralSpan && collateralSpan.textContent.includes('Collateral')) {
-                    collateralSpan.textContent = 'Collateral: ₹' + parseFloat(limits.collateral).toFixed(2);
+                    const val = parseFloat(limits.collateral);
+                    collateralSpan.textContent = 'Collateral: ' + (isNaN(val) ? '₹--' : '₹' + val.toFixed(2));
                 }
                 
                 // Update breakdown details
                 const detailValues = document.querySelectorAll('#balanceDetails .col-6.text-end');
                 if (detailValues.length >= 3) {
-                    detailValues[0].textContent = '₹' + limits.total_cash;
-                    detailValues[1].textContent = '+ ₹' + limits.unsettled_credit;
-                    detailValues[2].textContent = '₹' + limits.available_trade;
+                    detailValues[0].textContent = (limits.total_cash !== undefined && limits.total_cash !== null && limits.total_cash !== '') ? '₹' + limits.total_cash : '₹--';
+                    detailValues[1].textContent = (limits.unsettled_credit !== undefined && limits.unsettled_credit !== null && limits.unsettled_credit !== '') ? '+ ₹' + limits.unsettled_credit : '+ ₹--';
+                    detailValues[2].textContent = (limits.available_trade !== undefined && limits.available_trade !== null && limits.available_trade !== '') ? '₹' + limits.available_trade : '₹--';
                 }
             }
             // --- End Refresh System ---
