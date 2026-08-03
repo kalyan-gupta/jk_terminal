@@ -138,3 +138,76 @@ class TrackedOrderTestCase(TestCase):
         self.assertEqual(tracked.trading_symbol, 'RELIANCE')
         self.assertEqual(tracked.last_status, 'placed')
         self.assertFalse(tracked.is_terminal)
+
+    @patch('trades.kotak_neo_api.DirectNeoClient')
+    def test_modify_order_updates_tracked_order(self, MockDirectNeoClient):
+        import json
+        from django.utils import timezone
+        from trades.models import TrackedOrder, SessionActivity
+        from django.test import RequestFactory
+        from django.contrib.sessions.middleware import SessionMiddleware
+        from trades.views.orders import modify_order_ajax
+
+        mock_client = MagicMock()
+        MockDirectNeoClient.return_value = mock_client
+        mock_client.totp_login.return_value = {"status": "success", "data": {"token": "t", "sid": "s"}}
+        mock_client.totp_validate.return_value = {"status": "success", "data": {"token": "t2", "sid": "s2"}}
+        
+        # Setup initial tracked order
+        TrackedOrder.objects.create(
+            user=self.user,
+            order_id='260802999999',
+            trading_symbol='RELIANCE',
+            transaction_type='BUY',
+            quantity=10,
+            price=2400.0,
+            order_type='L',
+            product_type='MIS',
+            exchange_segment='nse_cm',
+            last_status='placed'
+        )
+
+        # Mock modification API response
+        mock_client.modify_order.return_value = {"status": "success", "nOrdNo": "260802999999"}
+
+        # Simulate AJAX request to modify_order_ajax
+        factory = RequestFactory()
+        
+        payload = {
+            'order_id': '260802999999',
+            'quantity': 15,
+            'price': 2450.0,
+            'order_type': 'L',
+            'trading_symbol': 'RELIANCE',
+            'transaction_type': 'BUY',
+            'exchange_segment': 'nse_cm',
+            'product_type': 'MIS'
+        }
+        
+        request = factory.post('/modify_order_ajax/', data=json.dumps(payload), content_type='application/json')
+        request.user = self.user
+        
+        # Setup session for decorator
+        middleware = SessionMiddleware(lambda req: None)
+        middleware.process_request(request)
+        request.session.save()
+        
+        # Setup SessionActivity to bypass decorator check
+        SessionActivity.objects.create(
+            user=self.user, 
+            session_key=request.session.session_key, 
+            sdk_session_active=True, 
+            sdk_session_expires_at=timezone.now() + timezone.timedelta(hours=1)
+        )
+
+        response = modify_order_ajax(request)
+        
+        # Verify response is 200 OK and status success
+        self.assertEqual(response.status_code, 200)
+        res_data = json.loads(response.content)
+        self.assertEqual(res_data.get('status'), 'success')
+
+        # Check that TrackedOrder was updated
+        tracked = TrackedOrder.objects.get(order_id='260802999999')
+        self.assertEqual(tracked.quantity, 15)
+        self.assertEqual(tracked.price, 2450.0)

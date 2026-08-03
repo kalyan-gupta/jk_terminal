@@ -544,7 +544,17 @@
                                 </thead>
                                 <tbody>
                                     {% for order in order_book %}
-                                    <tr class="order-book-row" data-order-id="{{ order.nOrdNo }}" data-order-symbol="{{ order.sym }}" data-order-type="{{ order.trnsTp }}" data-order-qty="{{ order.qty }}" data-order-price="{{ order.prc }}" style="cursor: pointer;">
+                                    <tr class="order-book-row" 
+                                        data-order-id="{{ order.nOrdNo }}" 
+                                        data-order-symbol="{{ order.sym }}" 
+                                        data-order-type="{{ order.trnsTp }}" 
+                                        data-order-qty="{{ order.qty }}" 
+                                        data-order-price="{{ order.prc }}"
+                                        data-order-status="{{ order.stat }}"
+                                        data-order-exch="{{ order.exSeg }}"
+                                        data-order-prod="{{ order.prod }}"
+                                        data-order-pt="{{ order.prcTp }}"
+                                        style="cursor: pointer;">
                                         <td class="small text-muted">{{ order.nOrdNo }}</td>
                                         <td>{{ order.ordDtTm }}</td>
                                         <td class="fw-bold">{{ order.sym }}</td>
@@ -831,46 +841,85 @@
             </div>
         </div>
 
-        <!-- Cancel Order Confirmation Modal -->
+        <!-- Order Action Modal (Modify/Cancel) -->
         <div class="modal fade" id="cancelOrderModal" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">Cancel Order</h5>
+                        <h5 class="modal-title" id="order-modal-title">Order Details & Actions</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <p>Are you sure you want to cancel this order?</p>
-                        <div class="card bg-light">
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-sm-6"><strong>Order ID:</strong></div>
-                                    <div class="col-sm-6" id="cancel-order-id">-</div>
+                        <!-- Alert for terminal states -->
+                        <div id="order-terminal-alert" class="alert alert-warning d-none" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            This order is in a terminal status and cannot be modified or cancelled.
+                        </div>
+
+                        <!-- Current Order Info -->
+                        <div class="card bg-light mb-3">
+                            <div class="card-body py-2 px-3 small">
+                                <div class="row mb-1">
+                                    <div class="col-6"><strong>Order ID:</strong></div>
+                                    <div class="col-6 text-end" id="cancel-order-id">-</div>
                                 </div>
-                                <div class="row">
-                                    <div class="col-sm-6"><strong>Symbol:</strong></div>
-                                    <div class="col-sm-6" id="cancel-order-symbol">-</div>
+                                <div class="row mb-1">
+                                    <div class="col-6"><strong>Symbol:</strong></div>
+                                    <div class="col-6 text-end" id="cancel-order-symbol">-</div>
                                 </div>
-                                <div class="row">
-                                    <div class="col-sm-6"><strong>Type:</strong></div>
-                                    <div class="col-sm-6" id="cancel-order-type">-</div>
+                                <div class="row mb-1">
+                                    <div class="col-6"><strong>Type:</strong></div>
+                                    <div class="col-6 text-end" id="cancel-order-type">-</div>
                                 </div>
-                                <div class="row">
-                                    <div class="col-sm-6"><strong>Quantity:</strong></div>
-                                    <div class="col-sm-6" id="cancel-order-qty">-</div>
+                                <div class="row mb-1">
+                                    <div class="col-6"><strong>Current Status:</strong></div>
+                                    <div class="col-6 text-end"><span class="badge rounded-pill bg-secondary text-uppercase" id="order-action-status">-</span></div>
                                 </div>
-                                <div class="row">
-                                    <div class="col-sm-6"><strong>Price:</strong></div>
-                                    <div class="col-sm-6" id="cancel-order-price">-</div>
+                                <div class="row mb-1 d-none" id="orig-qty-row">
+                                    <div class="col-6"><strong>Placed Qty:</strong></div>
+                                    <div class="col-6 text-end" id="cancel-order-qty">-</div>
+                                </div>
+                                <div class="row mb-1 d-none" id="orig-price-row">
+                                    <div class="col-6"><strong>Placed Price:</strong></div>
+                                    <div class="col-6 text-end" id="cancel-order-price">-</div>
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Modification Form (Only for non-terminal orders) -->
+                        <div id="order-modification-section">
+                            <h6 class="border-bottom pb-2 mb-3"><i class="bi bi-pencil-square me-1"></i> Modify Order</h6>
+                            <form id="modify-order-form">
+                                <div class="row g-2 mb-3">
+                                    <div class="col-md-6">
+                                        <label for="modify-order-qty" class="form-label small">Quantity</label>
+                                        <input type="number" class="form-control form-control-sm" id="modify-order-qty" min="1" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="modify-order-price" class="form-label small">Price (₹)</label>
+                                        <input type="number" class="form-control form-control-sm" id="modify-order-price" step="0.05" min="0" required>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="modify-order-type" class="form-label small">Order Type</label>
+                                    <select class="form-select form-select-sm" id="modify-order-type">
+                                        <option value="L">Limit</option>
+                                        <option value="MKT">Market</option>
+                                    </select>
+                                </div>
+                                <div class="d-grid mb-2">
+                                    <button type="submit" class="btn btn-sm btn-primary" id="submit-modify-btn">
+                                        <i class="bi bi-check-circle me-1"></i> Apply Modification
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Keep Order</button>
-                        <button type="button" class="btn btn-danger" id="confirm-cancel-btn">
-                            <i class="bi bi-x-circle me-1"></i> Yes, Cancel Order
+                    <div class="modal-footer justify-content-between" id="order-actions-footer">
+                        <button type="button" class="btn btn-sm btn-danger" id="confirm-cancel-btn">
+                            <i class="bi bi-x-circle me-1"></i> Cancel Order
                         </button>
+                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
                     </div>
                 </div>
             </div>

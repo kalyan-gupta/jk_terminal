@@ -2494,7 +2494,7 @@
                 });
             });
 
-            // Cancel order functionality
+            // Order action (Modify/Cancel) functionality
             document.addEventListener('click', function(e) {
                 const cancelButton = e.target.closest('.cancel-order-btn');
                 const orderRow = e.target.closest('.order-book-row');
@@ -2509,23 +2509,137 @@
                 const orderType = targetElement.dataset.orderType;
                 const orderQty = targetElement.dataset.orderQty;
                 const orderPrice = targetElement.dataset.orderPrice;
+                const orderStatus = targetElement.dataset.orderStatus ? targetElement.dataset.orderStatus.toLowerCase() : '';
+                const orderExch = targetElement.dataset.orderExch;
+                const orderProd = targetElement.dataset.orderProd;
+                const orderPt = targetElement.dataset.orderPt;
 
                 if (!orderId) {
                     return;
                 }
 
-                // Populate modal
+                // Populate modal info
                 document.getElementById('cancel-order-id').textContent = orderId;
                 document.getElementById('cancel-order-symbol').textContent = orderSymbol;
                 document.getElementById('cancel-order-type').textContent = orderType === 'B' ? 'Buy' : 'Sell';
                 document.getElementById('cancel-order-qty').textContent = orderQty;
                 document.getElementById('cancel-order-price').textContent = `₹${parseFloat(orderPrice).toFixed(2)}`;
 
-                // Store order ID for confirmation
-                document.getElementById('confirm-cancel-btn').dataset.orderId = orderId;
+                // Update Status Badge
+                const statusBadge = document.getElementById('order-action-status');
+                statusBadge.textContent = orderStatus || 'UNKNOWN';
+                statusBadge.className = 'badge rounded-pill text-uppercase';
+                
+                const terminalStatuses = ['complete', 'rejected', 'cancelled'];
+                if (orderStatus === 'complete') {
+                    statusBadge.classList.add('bg-success');
+                } else if (orderStatus === 'rejected') {
+                    statusBadge.classList.add('bg-danger');
+                } else if (orderStatus === 'cancelled') {
+                    statusBadge.classList.add('bg-secondary');
+                } else {
+                    statusBadge.classList.add('bg-primary');
+                }
+
+                // Show/hide components based on status
+                const isTerminal = terminalStatuses.includes(orderStatus);
+                const terminalAlert = document.getElementById('order-terminal-alert');
+                const modificationSection = document.getElementById('order-modification-section');
+                const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
+
+                if (isTerminal) {
+                    terminalAlert?.classList.remove('d-none');
+                    modificationSection?.classList.add('d-none');
+                    confirmCancelBtn?.classList.add('d-none');
+                } else {
+                    terminalAlert?.classList.add('d-none');
+                    modificationSection?.classList.remove('d-none');
+                    confirmCancelBtn?.classList.remove('d-none');
+
+                    // Pre-fill modification fields
+                    const qtyInput = document.getElementById('modify-order-qty');
+                    const priceInput = document.getElementById('modify-order-price');
+                    const typeSelect = document.getElementById('modify-order-type');
+
+                    if (qtyInput) qtyInput.value = orderQty;
+                    if (priceInput) priceInput.value = orderPrice;
+                    if (typeSelect) typeSelect.value = orderPt === 'MKT' ? 'MKT' : 'L';
+
+                    // Attach attributes to the form
+                    const modifyForm = document.getElementById('modify-order-form');
+                    if (modifyForm) {
+                        modifyForm.dataset.orderId = orderId;
+                        modifyForm.dataset.orderSymbol = orderSymbol;
+                        modifyForm.dataset.orderType = orderType;
+                        modifyForm.dataset.orderExch = orderExch;
+                        modifyForm.dataset.orderProd = orderProd;
+                    }
+                }
+
+                // Store order ID for cancellation confirmation
+                const cancelBtn = document.getElementById('confirm-cancel-btn');
+                if (cancelBtn) cancelBtn.dataset.orderId = orderId;
 
                 const cancelModal = new bootstrap.Modal(document.getElementById('cancelOrderModal'));
                 cancelModal.show();
+            });
+
+            // Handle modify order form submission
+            document.getElementById('modify-order-form')?.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const modifyForm = this;
+                const submitBtn = document.getElementById('submit-modify-btn');
+
+                const orderId = modifyForm.dataset.orderId;
+                const quantity = document.getElementById('modify-order-qty').value;
+                const price = document.getElementById('modify-order-price').value;
+                const orderType = document.getElementById('modify-order-type').value;
+
+                const payload = {
+                    order_id: orderId,
+                    quantity: quantity,
+                    price: price,
+                    order_type: orderType,
+                    trading_symbol: modifyForm.dataset.orderSymbol,
+                    transaction_type: modifyForm.dataset.orderType,
+                    exchange_segment: modifyForm.dataset.orderExch,
+                    product_type: modifyForm.dataset.orderProd
+                };
+
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...';
+                }
+
+                fetch('/modify_order_ajax/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify(payload)
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.status === 'success') {
+                        showNotification(result.message, 'success');
+                        const cancelModal = bootstrap.Modal.getInstance(document.getElementById('cancelOrderModal'));
+                        if (cancelModal) cancelModal.hide();
+                        setTimeout(() => refreshTradingData(), 1500);
+                    } else {
+                        showNotification(result.message || 'An unknown error occurred.', 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showNotification('A network error occurred. Please try again.', 'danger');
+                })
+                .finally(() => {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i> Apply Modification';
+                    }
+                });
             });
 
             // Confirm cancel order
@@ -3729,7 +3843,17 @@
                 let html = '';
                 orders.forEach(order => {
                     html += `
-                        <tr class="order-book-row" data-order-id="${order.nOrdNo}" data-order-symbol="${order.sym}" data-order-type="${order.trnsTp}" data-order-qty="${order.qty}" data-order-price="${order.prc}" style="cursor: pointer;">
+                        <tr class="order-book-row" 
+                            data-order-id="${order.nOrdNo}" 
+                            data-order-symbol="${order.sym}" 
+                            data-order-type="${order.trnsTp}" 
+                            data-order-qty="${order.qty}" 
+                            data-order-price="${order.prc}"
+                            data-order-status="${order.stat}"
+                            data-order-exch="${order.exSeg || ''}"
+                            data-order-prod="${order.prod || ''}"
+                            data-order-pt="${order.prcTp || ''}"
+                            style="cursor: pointer;">
                             <td class="small text-muted">${order.nOrdNo}</td>
                             <td>${order.ordDtTm}</td>
                             <td class="fw-bold">${order.sym}</td>

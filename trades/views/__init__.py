@@ -13,7 +13,7 @@ from .market import (
     check_scrip_status, get_depth, get_ltp, get_scrip_info_ajax, get_option_chain_ajax
 )
 from .orders import (
-    place_trade_ajax, check_margin_ajax, cancel_order_ajax, get_order_book_ajax,
+    place_trade_ajax, check_margin_ajax, cancel_order_ajax, modify_order_ajax, get_order_book_ajax,
     get_holdings_ajax, get_positions_ajax, get_limits_ajax
 )
 from .baskets import (

@@ -464,6 +464,8 @@ def admin_settings_view(request):
         settings_obj.order_placed_template = request.POST.get('order_placed_template', '')
         settings_obj.order_status_subject = request.POST.get('order_status_subject', '')
         settings_obj.order_status_template = request.POST.get('order_status_template', '')
+        settings_obj.order_modified_subject = request.POST.get('order_modified_subject', '')
+        settings_obj.order_modified_template = request.POST.get('order_modified_template', '')
         
         new_password = request.POST.get('host_password', '')
         if new_password:

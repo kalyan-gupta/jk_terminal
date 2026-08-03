@@ -70,8 +70,23 @@ def _order_monitor_loop():
                                 order_data = order_book_map[order_id_str]
                                 current_status = order_data.get('stat') or order_data.get('ordSt') or 'unknown'
                                 
-                                # Check if status changed
-                                if current_status.strip().lower() != tracked_order.last_status.strip().lower():
+                                # Sync quantity and price if they differ from Kotak's response
+                                params_modified = False
+                                try:
+                                    kotak_qty = int(order_data.get('qty', tracked_order.quantity))
+                                    kotak_price = float(order_data.get('prc', tracked_order.price))
+                                    if kotak_qty != tracked_order.quantity or abs(kotak_price - tracked_order.price) > 0.001:
+                                        logger.info(f"Order {tracked_order.order_id} parameters modified on broker: Qty {tracked_order.quantity} -> {kotak_qty}, Price {tracked_order.price} -> {kotak_price}")
+                                        tracked_order.quantity = kotak_qty
+                                        tracked_order.price = kotak_price
+                                        tracked_order.save()
+                                        params_modified = True
+                                except Exception as e:
+                                    logger.error(f"Error syncing tracked order parameters: {e}")
+                                
+                                # Check if status changed or parameters modified
+                                status_changed = current_status.strip().lower() != tracked_order.last_status.strip().lower()
+                                if status_changed or params_modified:
                                     old_status = tracked_order.last_status
                                     tracked_order.last_status = current_status
                                     
@@ -81,7 +96,13 @@ def _order_monitor_loop():
                                         tracked_order.is_terminal = True
                                         
                                     tracked_order.save()
-                                    logger.info(f"Order {tracked_order.order_id} ({tracked_order.trading_symbol}) changed status from {old_status} -> {current_status}")
+                                    
+                                    # Determine the status to display in the email update
+                                    display_status = current_status
+                                    if params_modified and not status_changed:
+                                        display_status = "modified"
+                                    
+                                    logger.info(f"Order {tracked_order.order_id} ({tracked_order.trading_symbol}) changed: {old_status} -> {display_status}")
                                     
                                     # Send status change email
                                     try:
@@ -96,9 +117,11 @@ def _order_monitor_loop():
                                                 use_tls=smtp_settings.use_tls,
                                                 timeout=5
                                             )
+                                            subj_temp = smtp_settings.order_modified_subject if display_status == "modified" else smtp_settings.order_status_subject
+                                            body_temp = smtp_settings.order_modified_template if display_status == "modified" else smtp_settings.order_status_template
                                             email_msg = smtp_settings.send_html_email(
-                                                subject_template=smtp_settings.order_status_subject,
-                                                body_template=smtp_settings.order_status_template,
+                                                subject_template=subj_temp,
+                                                body_template=body_temp,
                                                 context_dict={
                                                     'username': user.username,
                                                     'trading_symbol': tracked_order.trading_symbol,
@@ -106,13 +129,13 @@ def _order_monitor_loop():
                                                     'quantity': tracked_order.quantity,
                                                     'price': tracked_order.price,
                                                     'order_id': tracked_order.order_id,
-                                                    'last_status': current_status,
+                                                    'last_status': display_status,
                                                 },
                                                 to_emails=[user.email],
                                                 connection=connection
                                             )
                                             email_msg.send(fail_silently=False)
-                                            logger.info(f"Status update email sent successfully to {user.email} for order {tracked_order.order_id}")
+                                            logger.info(f"Status update email sent successfully to {user.email} for order {tracked_order.order_id} (Status: {display_status})")
                                     except Exception as mail_ex:
                                         logger.error(f"Failed to send order status email for {tracked_order.order_id}: {mail_ex}")
                                         

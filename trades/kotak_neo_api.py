@@ -157,6 +157,25 @@ class DirectNeoClient:
         query_params = {"sId": self.serverId} if self.serverId else None
         return self.request("POST", "quick/order/rule/ms/place", query_params=query_params, body_params=body, urlencoded=True)
 
+    def modify_order(self, **kwargs):
+        body = {
+            "am": kwargs.get("amo", "NO"),
+            "dq": kwargs.get("disclosed_quantity", "0"),
+            "es": kwargs.get("exchange_segment"),
+            "mp": kwargs.get("market_protection", "0"),
+            "pc": kwargs.get("product"),
+            "pf": kwargs.get("pf", "N"),
+            "pr": kwargs.get("price", "0"),
+            "pt": kwargs.get("order_type"),
+            "qt": kwargs.get("quantity"),
+            "rt": kwargs.get("validity", "DAY"),
+            "tp": kwargs.get("trigger_price", "0"),
+            "ts": kwargs.get("trading_symbol"),
+            "tt": kwargs.get("transaction_type"),
+            "no": kwargs.get("order_id")
+        }
+        return self.request("POST", "quick/order/vr/modify", body_params=body, urlencoded=True)
+
     def margin_required(self, **kwargs):
         body = {
             "brkName": kwargs.get("broker_name", "KOTAK"),
@@ -626,6 +645,33 @@ class KotakNeoAPI:
         except Exception as e:
             logger.error(f"Error cancelling order: {e}", exc_info=True)
             return {"error": f"An error occurred while cancelling order: {e}"}
+
+    def modify_order(self, order_id, quantity, price, trading_symbol, transaction_type, exchange_segment='nse_cm', product='MIS', order_type='L', validity='DAY', amo='NO'):
+        auth_response = self.authenticate()
+        if 'error' in auth_response:
+            return auth_response
+
+        try:
+            order_params = {
+                'order_id': str(order_id),
+                'exchange_segment': exchange_segment,
+                'product': product,
+                'order_type': order_type,
+                'quantity': str(quantity),
+                'validity': validity,
+                'trading_symbol': trading_symbol,
+                'transaction_type': transaction_type[0].upper(),
+                'amo': amo
+            }
+            order_params['price'] = str(price) if price is not None else '0'
+            
+            logger.info(f"Attempting to modify order {order_id}: {order_params}")
+            result = self.client.modify_order(**order_params)
+            logger.info(f"Modify order successful: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"Error modifying order: {e}", exc_info=True)
+            return {"error": f"An error occurred while modifying order: {e}"}
 
     def place_trade(self, trading_symbol, quantity, price, transaction_type,
                         exchange_segment='nse_cm', product='MIS', order_type='L', validity='DAY', amo='NO'):

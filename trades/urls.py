@@ -35,6 +35,7 @@ urlpatterns = [
     path('place_trade_ajax/', views.place_trade_ajax, name='place_trade_ajax'),
     path('check_margin_ajax/', views.check_margin_ajax, name='check_margin_ajax'),
     path('cancel_order_ajax/', views.cancel_order_ajax, name='cancel_order_ajax'),
+    path('modify_order_ajax/', views.modify_order_ajax, name='modify_order_ajax'),
     path('search_scrips_ajax/', views.search_scrips_ajax, name='search_scrips_ajax'),
     path('search_scrip_cache/', views.search_scrip_cache, name='search_scrip_cache'),
     path('refresh_scrip_master/', views.refresh_scrip_master, name='refresh_scrip_master'),
