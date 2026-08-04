@@ -83,184 +83,172 @@ def _perform_scrip_cache_refresh():
 
         connection = connections['scrip_cache']
         
-        # Pass 1: Collect Option Underlyings using a streaming csv reader
-        option_underlyings = set()
-        for csv_file in csv_files:
-            try:
-                with open(csv_file, 'r', encoding='utf-8', errors='ignore') as f:
-                    reader = csv.reader(f)
-                    try:
-                        headers = next(reader)
-                    except StopIteration:
-                        continue
-                    
-                    headers_clean = [h.strip().rstrip(';') for h in headers]
-                    
-                    try:
-                        asset_code_idx = headers_clean.index('pAssetCode')
-                        inst_type_idx = headers_clean.index('pInstType')
-                    except ValueError:
-                        continue
-                    
-                    for row in reader:
-                        if len(row) > max(asset_code_idx, inst_type_idx):
-                            inst_type = row[inst_type_idx].strip()
-                            if inst_type in ('OPTIDX', 'OPTSTK', 'IO', 'SO'):
-                                asset_code = row[asset_code_idx].strip()
-                                if asset_code:
-                                    option_underlyings.add(asset_code)
-            except Exception as fe:
-                logger.error(f"Error in Pass 1 for file {csv_file}: {fe}")
-
-        # Pass 2: Stream, process and load into SQLite
+        # Optimize SQLite speed settings for bulk load (Must be done OUTSIDE transaction)
         with connection.cursor() as cursor:
-            cursor.execute("DROP TABLE IF EXISTS active_market_data")
-            cursor.execute("""
-                CREATE TABLE active_market_data (
-                    pSymbol TEXT,
-                    pExchSeg TEXT,
-                    pSymbolName TEXT,
-                    pTrdSymbol TEXT,
-                    pOptionType TEXT,
-                    pInstType TEXT,
-                    dStrikePrice REAL,
-                    pScripRefKey TEXT,
-                    pDesc TEXT,
-                    pGroup TEXT,
-                    pAssetCode TEXT,
-                    dTickSize REAL,
-                    lLotSize INTEGER,
-                    expire_date TEXT,
-                    has_option_chain INTEGER
-                )
-            """)
+            cursor.execute("PRAGMA synchronous = OFF")
+            cursor.execute("PRAGMA journal_mode = MEMORY")
+            cursor.execute("PRAGMA temp_store = MEMORY")
 
-            date_pat = re.compile(r'(\d{2})([A-Z]{3})(\d{2})')
-            month_map = {
-                'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6,
-                'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12
-            }
-            
-            today_str = datetime.date.today().strftime('%Y-%m-%d')
-            
-            insert_sql = """
-                INSERT INTO active_market_data (
-                    pSymbol, pExchSeg, pSymbolName, pTrdSymbol, pOptionType, pInstType,
-                    dStrikePrice, pScripRefKey, pDesc, pGroup, pAssetCode,
-                    dTickSize, lLotSize, expire_date, has_option_chain
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
+        # Stream, process and load into SQLite
+        with transaction.atomic('scrip_cache'):
+            with connection.cursor() as cursor:
+                cursor.execute("DROP TABLE IF EXISTS active_market_data")
+                cursor.execute("""
+                    CREATE TABLE active_market_data (
+                        pSymbol TEXT,
+                        pExchSeg TEXT,
+                        pSymbolName TEXT,
+                        pTrdSymbol TEXT,
+                        pOptionType TEXT,
+                        pInstType TEXT,
+                        dStrikePrice REAL,
+                        pScripRefKey TEXT,
+                        pDesc TEXT,
+                        pGroup TEXT,
+                        pAssetCode TEXT,
+                        dTickSize REAL,
+                        lLotSize INTEGER,
+                        expire_date TEXT,
+                        has_option_chain INTEGER
+                    )
+                """)
 
-            for csv_file in csv_files:
-                try:
-                    with open(csv_file, 'r', encoding='utf-8', errors='ignore') as f:
-                        reader = csv.reader(f)
-                        try:
-                            headers = next(reader)
-                        except StopIteration:
-                            continue
-                        
-                        headers_clean = [h.strip().rstrip(';') for h in headers]
-                        
-                        indices = {
-                            'pSymbol': headers_clean.index('pSymbol') if 'pSymbol' in headers_clean else -1,
-                            'pExchSeg': headers_clean.index('pExchSeg') if 'pExchSeg' in headers_clean else -1,
-                            'pSymbolName': headers_clean.index('pSymbolName') if 'pSymbolName' in headers_clean else -1,
-                            'pTrdSymbol': headers_clean.index('pTrdSymbol') if 'pTrdSymbol' in headers_clean else -1,
-                            'pOptionType': headers_clean.index('pOptionType') if 'pOptionType' in headers_clean else -1,
-                            'pInstType': headers_clean.index('pInstType') if 'pInstType' in headers_clean else -1,
-                            'dStrikePrice': headers_clean.index('dStrikePrice') if 'dStrikePrice' in headers_clean else -1,
-                            'pScripRefKey': headers_clean.index('pScripRefKey') if 'pScripRefKey' in headers_clean else -1,
-                            'pDesc': headers_clean.index('pDesc') if 'pDesc' in headers_clean else -1,
-                            'pGroup': headers_clean.index('pGroup') if 'pGroup' in headers_clean else -1,
-                            'pAssetCode': headers_clean.index('pAssetCode') if 'pAssetCode' in headers_clean else -1,
-                            'dTickSize': headers_clean.index('dTickSize') if 'dTickSize' in headers_clean else -1,
-                            'lLotSize': headers_clean.index('lLotSize') if 'lLotSize' in headers_clean else -1,
-                        }
-                        
-                        batch = []
-                        for row in reader:
-                            row_len = len(row)
-                            
-                            def get_val(col_name):
-                                idx = indices[col_name]
-                                if idx >= 0 and idx < row_len:
-                                    return row[idx].strip()
-                                return None
-                            
-                            pSymbol = get_val('pSymbol')
-                            pExchSeg = get_val('pExchSeg')
-                            pSymbolName = get_val('pSymbolName')
-                            pTrdSymbol = get_val('pTrdSymbol')
-                            pOptionType = get_val('pOptionType')
-                            pInstType = get_val('pInstType')
-                            pScripRefKey = get_val('pScripRefKey')
-                            pDesc = get_val('pDesc')
-                            pGroup = get_val('pGroup')
-                            pAssetCode = get_val('pAssetCode')
-                            
-                            strike_val = get_val('dStrikePrice')
+                date_pat = re.compile(r'(\d{2})([A-Z]{3})(\d{2})')
+                month_map = {
+                    'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6,
+                    'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12
+                }
+                
+                today_str = datetime.date.today().strftime('%Y-%m-%d')
+                
+                insert_sql = """
+                    INSERT INTO active_market_data (
+                        pSymbol, pExchSeg, pSymbolName, pTrdSymbol, pOptionType, pInstType,
+                        dStrikePrice, pScripRefKey, pDesc, pGroup, pAssetCode,
+                        dTickSize, lLotSize, expire_date, has_option_chain
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """
+
+                for csv_file in csv_files:
+                    try:
+                        with open(csv_file, 'r', encoding='utf-8', errors='ignore') as f:
+                            reader = csv.reader(f)
                             try:
-                                dStrikePrice = float(strike_val) if strike_val else 0.0
-                            except ValueError:
-                                dStrikePrice = 0.0
-
-                            tick_val = get_val('dTickSize')
-                            try:
-                                dTickSize = float(tick_val) if tick_val else 0.0
-                            except ValueError:
-                                dTickSize = 0.0
-
-                            lot_val = get_val('lLotSize')
-                            try:
-                                lLotSize = int(lot_val) if lot_val else 0
-                            except ValueError:
-                                lLotSize = 0
-
-                            expire_date = None
-                            if pScripRefKey:
-                                m = date_pat.search(pScripRefKey)
-                                if m:
-                                    day, mon, yr = m.groups()
-                                    mon_num = month_map.get(mon.upper())
-                                    if mon_num:
-                                        try:
-                                            year = 2000 + int(yr)
-                                            expire_date = f"{year:04d}-{mon_num:02d}-{int(day):02d}"
-                                        except Exception:
-                                            pass
-
-                            if expire_date and expire_date < today_str:
+                                headers = next(reader)
+                            except StopIteration:
                                 continue
+                            
+                            headers_clean = [h.strip().rstrip(';') for h in headers]
+                            
+                            indices = {
+                                'pSymbol': headers_clean.index('pSymbol') if 'pSymbol' in headers_clean else -1,
+                                'pExchSeg': headers_clean.index('pExchSeg') if 'pExchSeg' in headers_clean else -1,
+                                'pSymbolName': headers_clean.index('pSymbolName') if 'pSymbolName' in headers_clean else -1,
+                                'pTrdSymbol': headers_clean.index('pTrdSymbol') if 'pTrdSymbol' in headers_clean else -1,
+                                'pOptionType': headers_clean.index('pOptionType') if 'pOptionType' in headers_clean else -1,
+                                'pInstType': headers_clean.index('pInstType') if 'pInstType' in headers_clean else -1,
+                                'dStrikePrice': headers_clean.index('dStrikePrice') if 'dStrikePrice' in headers_clean else -1,
+                                'pScripRefKey': headers_clean.index('pScripRefKey') if 'pScripRefKey' in headers_clean else -1,
+                                'pDesc': headers_clean.index('pDesc') if 'pDesc' in headers_clean else -1,
+                                'pGroup': headers_clean.index('pGroup') if 'pGroup' in headers_clean else -1,
+                                'pAssetCode': headers_clean.index('pAssetCode') if 'pAssetCode' in headers_clean else -1,
+                                'dTickSize': headers_clean.index('dTickSize') if 'dTickSize' in headers_clean else -1,
+                                'lLotSize': headers_clean.index('lLotSize') if 'lLotSize' in headers_clean else -1,
+                            }
+                            
+                            batch = []
+                            for row in reader:
+                                row_len = len(row)
+                                
+                                def get_val(col_name):
+                                    idx = indices[col_name]
+                                    if idx >= 0 and idx < row_len:
+                                        return row[idx].strip()
+                                    return None
+                                
+                                pSymbol = get_val('pSymbol')
+                                pExchSeg = get_val('pExchSeg')
+                                pSymbolName = get_val('pSymbolName')
+                                pTrdSymbol = get_val('pTrdSymbol')
+                                pOptionType = get_val('pOptionType')
+                                pInstType = get_val('pInstType')
+                                pScripRefKey = get_val('pScripRefKey')
+                                pDesc = get_val('pDesc')
+                                pGroup = get_val('pGroup')
+                                pAssetCode = get_val('pAssetCode')
+                                
+                                strike_val = get_val('dStrikePrice')
+                                try:
+                                    dStrikePrice = float(strike_val) if strike_val else 0.0
+                                except ValueError:
+                                    dStrikePrice = 0.0
 
-                            has_option_chain = 1 if (pSymbol in option_underlyings) else 0
+                                tick_val = get_val('dTickSize')
+                                try:
+                                    dTickSize = float(tick_val) if tick_val else 0.0
+                                except ValueError:
+                                    dTickSize = 0.0
 
-                            batch.append((
-                                pSymbol, pExchSeg, pSymbolName, pTrdSymbol, pOptionType, pInstType,
-                                dStrikePrice, pScripRefKey, pDesc, pGroup, pAssetCode,
-                                dTickSize, lLotSize, expire_date, has_option_chain
-                            ))
+                                lot_val = get_val('lLotSize')
+                                try:
+                                    lLotSize = int(lot_val) if lot_val else 0
+                                except ValueError:
+                                    lLotSize = 0
 
-                            if len(batch) >= 1000:
+                                expire_date = None
+                                if pScripRefKey:
+                                    m = date_pat.search(pScripRefKey)
+                                    if m:
+                                        day, mon, yr = m.groups()
+                                        mon_num = month_map.get(mon.upper())
+                                        if mon_num:
+                                            try:
+                                                year = 2000 + int(yr)
+                                                expire_date = f"{year:04d}-{mon_num:02d}-{int(day):02d}"
+                                            except Exception:
+                                                pass
+
+                                if expire_date and expire_date < today_str:
+                                    continue
+
+                                batch.append((
+                                    pSymbol, pExchSeg, pSymbolName, pTrdSymbol, pOptionType, pInstType,
+                                    dStrikePrice, pScripRefKey, pDesc, pGroup, pAssetCode,
+                                    dTickSize, lLotSize, expire_date, 0
+                                ))
+
+                                if len(batch) >= 5000:
+                                    cursor.executemany(insert_sql, batch)
+                                    batch = []
+                            
+                            if batch:
                                 cursor.executemany(insert_sql, batch)
-                                batch = []
-                        
-                        if batch:
-                            cursor.executemany(insert_sql, batch)
 
-                except Exception as fe:
-                    logger.error(f"Error in Pass 2 for file {csv_file}: {fe}")
+                    except Exception as fe:
+                        logger.error(f"Error in Pass 2 for file {csv_file}: {fe}")
 
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_symbol_exch ON active_market_data (pSymbol, pExchSeg)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_asset_code ON active_market_data (pAssetCode)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_name ON active_market_data (pSymbolName)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_ref_key ON active_market_data (pScripRefKey)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_expiry ON active_market_data (expire_date)")
-            
-            cursor.execute("SELECT COUNT(*) FROM active_market_data")
-            row_count = cursor.fetchone()[0]
-            logger.info(f"Refreshed SQLite active_market_data with {row_count} active scrips.")
-            return True, f"Refreshed with {row_count} scrips from {len(csv_files)} files.", row_count
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_symbol_exch ON active_market_data (pSymbol, pExchSeg)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_asset_code ON active_market_data (pAssetCode)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_name ON active_market_data (pSymbolName)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_ref_key ON active_market_data (pScripRefKey)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_expiry ON active_market_data (expire_date)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_amd_inst_type ON active_market_data (pInstType)")
+                
+                # Fast update of option chain presence
+                cursor.execute("""
+                    UPDATE active_market_data
+                    SET has_option_chain = 1
+                    WHERE pSymbol IN (
+                        SELECT DISTINCT pAssetCode
+                        FROM active_market_data
+                        WHERE pInstType IN ('OPTIDX', 'OPTSTK', 'IO', 'SO')
+                    )
+                """)
+
+                cursor.execute("SELECT COUNT(*) FROM active_market_data")
+                row_count = cursor.fetchone()[0]
+                logger.info(f"Refreshed SQLite active_market_data with {row_count} active scrips.")
+                return True, f"Refreshed with {row_count} scrips from {len(csv_files)} files.", row_count
 
     except Exception as e:
         logger.error(f"Error performing scrip cache refresh: {e}")

@@ -17,7 +17,7 @@ import logging
 from django.utils import timezone
 
 from ..kotak_neo_api import KotakNeoAPI
-from ..models import UserNeoCredentials, SessionActivity, SMTPSettings, UserSecurity, PlatformSettings, ActiveMarketData
+from ..models import UserNeoCredentials, SessionActivity, SMTPSettings, UserSecurity, PlatformSettings, ActiveMarketData, TrackedOrder
 from ..forms import LoginForm, RegistrationForm, UserNeoCredentialsForm, UserProfileForm, TOTPForm, ForgotPasswordForm, SetNewPasswordForm, ChangePasswordForm, OTPVerifyForm
 from ..decorators import login_required_with_session_check, ajax_login_required
 from .helpers import _process_holdings_data, _process_positions_data, _process_limits_data
@@ -178,6 +178,109 @@ def cancel_order_ajax(request):
             return JsonResponse({'status': 'error', 'message': api_response['errMsg']}, status=400)
         
         return JsonResponse({'status': 'success', 'message': f"Order cancellation requested: {api_response.get('result', 'Success')} - {api_response.get('stat', 'Success')}"})
+
+    except (json.JSONDecodeError, ValueError, TypeError) as e:
+        return JsonResponse({'error': f"Invalid request data: {e}"}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': f"An unexpected error occurred: {e}"}, status=500)
+
+
+@ajax_login_required
+def modify_order_ajax(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST requests are allowed'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        order_id = data.get('order_id')
+        quantity = data.get('quantity')
+        price = data.get('price')
+        order_type = data.get('order_type', 'L')
+        trading_symbol = data.get('trading_symbol')
+        exchange_segment = data.get('exchange_segment')
+        transaction_type = data.get('transaction_type')
+        product_type = data.get('product_type')
+
+        if not all([order_id, quantity, price, trading_symbol, transaction_type, exchange_segment, product_type]):
+            return JsonResponse({'error': 'Required fields are missing.'}, status=400)
+
+        logger.info(f"User '{request.user.username}' requesting modification of order ID: {order_id} (New Qty: {quantity}, New Price: {price})")
+
+        api = KotakNeoAPI(user=request.user, session_id=request.session.session_key)
+        api_response = api.modify_order(
+            order_id=order_id,
+            quantity=int(quantity),
+            price=float(price),
+            trading_symbol=trading_symbol,
+            transaction_type=transaction_type,
+            exchange_segment=exchange_segment,
+            product=product_type,
+            order_type=order_type
+        )
+
+        if isinstance(api_response, dict) and 'error' in api_response:
+            if 'One-time TOTP code is required' in api_response['error']:
+                return JsonResponse({'status': 'reauth_required', 'message': 'Trade session expired. Please reauthenticate.'}, status=401)
+            return JsonResponse({'status': 'error', 'message': api_response['error']}, status=400)
+
+        if 'errMsg' in api_response:
+            return JsonResponse({'status': 'error', 'message': api_response['errMsg']}, status=400)
+
+        # Update local tracking order
+        try:
+            tracked_order = TrackedOrder.objects.get(order_id=str(order_id))
+            tracked_order.quantity = int(quantity)
+            tracked_order.price = float(price)
+            tracked_order.order_type = order_type
+            tracked_order.save()
+            logger.info(f"Updated TrackedOrder {order_id} with new parameters (qty: {quantity}, prc: {price}, type: {order_type})")
+        except TrackedOrder.DoesNotExist:
+            logger.warning(f"No TrackedOrder found for modified order {order_id}")
+
+        # Send immediate email notification for modification
+        try:
+            smtp_settings = SMTPSettings.get_settings()
+            if smtp_settings.enable_order_notifications and smtp_settings.host and smtp_settings.host_user and request.user.email:
+                from django.core.mail import get_connection
+                connection = get_connection(
+                    host=smtp_settings.host,
+                    port=smtp_settings.port,
+                    username=smtp_settings.host_user,
+                    password=smtp_settings.get_decrypted_password(),
+                    use_tls=smtp_settings.use_tls,
+                    timeout=5
+                )
+                
+                email_msg = smtp_settings.send_html_email(
+                    subject_template=smtp_settings.order_modified_subject,
+                    body_template=smtp_settings.order_modified_template,
+                    context_dict={
+                        'username': request.user.username,
+                        'trading_symbol': trading_symbol,
+                        'transaction_type': 'BUY' if transaction_type[0].upper() == 'B' else 'SELL',
+                        'quantity': quantity,
+                        'price': price,
+                        'order_type': order_type,
+                        'product_type': product_type,
+                        'exchange_segment': exchange_segment,
+                        'order_id': order_id,
+                    },
+                    to_emails=[request.user.email],
+                    connection=connection
+                )
+                
+                def send_email_async(msg):
+                    try:
+                        msg.send(fail_silently=False)
+                        logger.info(f"Order modification email sent successfully to {request.user.email} for order {order_id}")
+                    except Exception as ex:
+                        logger.error(f"Failed to send order modification email async: {ex}")
+
+                threading.Thread(target=send_email_async, args=(email_msg,)).start()
+        except Exception as email_ex:
+            logger.error(f"Failed to setup order modification email: {email_ex}", exc_info=True)
+
+        return JsonResponse({'status': 'success', 'message': f"Order modification requested successfully! Order ID: {order_id}"})
 
     except (json.JSONDecodeError, ValueError, TypeError) as e:
         return JsonResponse({'error': f"Invalid request data: {e}"}, status=400)

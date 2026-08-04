@@ -1,32 +1,5 @@
-// Theme Engine Configuration
-        const themes = ['light', 'dark', 'glass'];
-        const themeIcons = {
-            'light': 'bi-sun-fill',
-            'dark': 'bi-moon-fill',
-            'glass': 'bi-sparkles'
-        };
+// Theme logic is managed globally by base.html
 
-        window.applyTheme = function(theme) {
-            document.documentElement.setAttribute('data-theme', theme);
-            localStorage.setItem('app-theme', theme);
-            const iconEl = document.getElementById('theme-toggle-icon');
-            if (iconEl) {
-                iconEl.className = 'bi ' + themeIcons[theme] + ' fs-5';
-            }
-        };
-
-        window.cycleTheme = function() {
-            let currentTheme = localStorage.getItem('app-theme') || 'light';
-            let nextIndex = (themes.indexOf(currentTheme) + 1) % themes.length;
-            let nextTheme = themes[nextIndex];
-            window.applyTheme(nextTheme);
-        };
-
-        // Initialize Theme Icons on Page Load
-        document.addEventListener('DOMContentLoaded', () => {
-            const currentTheme = localStorage.getItem('app-theme') || 'light';
-            window.applyTheme(currentTheme);
-        });
 
         // Use data attributes to avoid IDE parsing errors with template variables in JS
         const settingsData = document.getElementById('platform-settings-data').dataset;
@@ -582,6 +555,25 @@
                     }
                 };
                 
+                // Helper to flash green or red on price change
+                function flashLtp(el, newVal) {
+                    if (!el || !newVal) return;
+                    const oldText = el.textContent || el.innerText;
+                    const oldVal = parseFloat(oldText.replace(/[^\d.]/g, ''));
+                    if (!isNaN(oldVal)) {
+                        const parsedNew = parseFloat(newVal);
+                        if (parsedNew > oldVal) {
+                            el.classList.remove('flash-green', 'flash-red');
+                            void el.offsetWidth;
+                            el.classList.add('flash-green');
+                        } else if (parsedNew < oldVal) {
+                            el.classList.remove('flash-green', 'flash-red');
+                            void el.offsetWidth;
+                            el.classList.add('flash-red');
+                        }
+                    }
+                }
+
                 tradeSocket.onmessage = function(e) {
                     const incoming_data = JSON.parse(e.data);
                     
@@ -597,6 +589,7 @@
                                 currentUnderlyingLtp = parseFloat(quote.ltp);
                                 const badge = document.getElementById('oc-underlying-ltp');
                                 if (badge && !isNaN(currentUnderlyingLtp)) {
+                                    flashLtp(badge, currentUnderlyingLtp);
                                     badge.textContent = `LTP: ₹${currentUnderlyingLtp.toFixed(2)}`;
                                     if (typeof updateATMHighlight === 'function') updateATMHighlight();
                                 }
@@ -606,6 +599,7 @@
                             if (currentOCTokens.has(instrumentSymbol)) {
                                 const ocLtpEl = document.getElementById(`oc-ltp-${instrumentSymbol}`);
                                 if (ocLtpEl && quote.ltp) {
+                                    flashLtp(ocLtpEl, quote.ltp);
                                     ocLtpEl.textContent = `₹${parseFloat(quote.ltp).toFixed(2)}`;
                                 }
                             }
@@ -614,6 +608,7 @@
                             if (currentBasketTokens.has(instrumentSymbol)) {
                                 const bLtpEl = document.getElementById(`basket-ltp-${instrumentSymbol}`);
                                 if (bLtpEl && quote.ltp) {
+                                    flashLtp(bLtpEl, quote.ltp);
                                     bLtpEl.textContent = `LTP: ₹${parseFloat(quote.ltp).toFixed(2)}`;
                                 }
                             }
@@ -622,6 +617,7 @@
                             const hLtpCell = document.getElementById(`ltp-${instrumentSymbol}`);
                             if (hLtpCell && quote.ltp) {
                                 const lastPrice = parseFloat(quote.ltp);
+                                flashLtp(hLtpCell, lastPrice);
                                 hLtpCell.innerText = `₹${lastPrice.toFixed(2)}`;
                                 const pnlCell = document.getElementById(`pnl-${instrumentSymbol}`);
                                 if (pnlCell) {
@@ -640,6 +636,7 @@
                             const pLtpCell = document.getElementById(`pos-ltp-${instrumentSymbol}`);
                             if (pLtpCell && quote.ltp) {
                                 const lastPrice = parseFloat(quote.ltp);
+                                flashLtp(pLtpCell, lastPrice);
                                 pLtpCell.innerText = `₹${lastPrice.toFixed(2)}`;
                                 const pnlCell = document.getElementById(`pos-pnl-${instrumentSymbol}`);
                                 if (pnlCell) {
@@ -665,7 +662,10 @@
                                 const ltpHeader = document.getElementById('order-ltp-badge-text');
                                 if (quote.ltp) {
                                     lastActiveOrderLtp = parseFloat(quote.ltp);
-                                    if (ltpHeader) ltpHeader.textContent = `LTP: ₹${lastActiveOrderLtp.toFixed(2)}`;
+                                    if (ltpHeader) {
+                                        flashLtp(ltpHeader, lastActiveOrderLtp);
+                                        ltpHeader.textContent = `LTP: ₹${lastActiveOrderLtp.toFixed(2)}`;
+                                    }
                                     if (typeof calculateTotal === 'function') calculateTotal();
                                 }
                                 if (quote.depth && document.getElementById('order-depth-section')?.classList.contains('show')) {
@@ -748,12 +748,15 @@
                             window.isFeedPaused = true;
                             const resumeBtn = document.getElementById('resume-feed-nav-btn');
                             if (resumeBtn) resumeBtn.style.display = 'block';
+                            if (typeof window.updateDiagSummary === 'function') window.updateDiagSummary(window.isSDKAuthenticated);
+                            if (typeof window.checkDiagnostics === 'function') window.checkDiagnostics();
                         }, 500);
                     } else if (incoming_data.type === 'feed_paused') {
                         window.isFeedPaused = true;
                         const resumeBtn = document.getElementById('resume-feed-nav-btn');
                         if (resumeBtn) resumeBtn.style.display = 'block';
-                        showNotification(incoming_data.message, 'warning');
+                        if (typeof window.updateDiagSummary === 'function') window.updateDiagSummary(window.isSDKAuthenticated);
+                        if (typeof window.checkDiagnostics === 'function') window.checkDiagnostics();
                     } else if (incoming_data.type === 'status') {
                         // Clear any pending conflict popup
                         if (window.conflictModalTimeout) {
@@ -772,7 +775,6 @@
                             if (modalInstance) modalInstance.hide();
                         }
                         
-                        
                         // Re-sync all active subscriptions
                         if (document.getElementById('holdings-tab')?.classList.contains('active')) {
                             manageTableSubscriptions('holdings-table', true);
@@ -790,7 +792,8 @@
                             });
                         }
 
-                        showNotification(incoming_data.message, 'success');
+                        if (typeof window.updateDiagSummary === 'function') window.updateDiagSummary(window.isSDKAuthenticated);
+                        if (typeof window.checkDiagnostics === 'function') window.checkDiagnostics();
                     }
                 };
 
@@ -2518,7 +2521,7 @@
                 });
             });
 
-            // Cancel order functionality
+            // Order action (Modify/Cancel) functionality
             document.addEventListener('click', function(e) {
                 const cancelButton = e.target.closest('.cancel-order-btn');
                 const orderRow = e.target.closest('.order-book-row');
@@ -2533,23 +2536,137 @@
                 const orderType = targetElement.dataset.orderType;
                 const orderQty = targetElement.dataset.orderQty;
                 const orderPrice = targetElement.dataset.orderPrice;
+                const orderStatus = targetElement.dataset.orderStatus ? targetElement.dataset.orderStatus.toLowerCase() : '';
+                const orderExch = targetElement.dataset.orderExch;
+                const orderProd = targetElement.dataset.orderProd;
+                const orderPt = targetElement.dataset.orderPt;
 
                 if (!orderId) {
                     return;
                 }
 
-                // Populate modal
+                // Populate modal info
                 document.getElementById('cancel-order-id').textContent = orderId;
                 document.getElementById('cancel-order-symbol').textContent = orderSymbol;
                 document.getElementById('cancel-order-type').textContent = orderType === 'B' ? 'Buy' : 'Sell';
                 document.getElementById('cancel-order-qty').textContent = orderQty;
                 document.getElementById('cancel-order-price').textContent = `₹${parseFloat(orderPrice).toFixed(2)}`;
 
-                // Store order ID for confirmation
-                document.getElementById('confirm-cancel-btn').dataset.orderId = orderId;
+                // Update Status Badge
+                const statusBadge = document.getElementById('order-action-status');
+                statusBadge.textContent = orderStatus || 'UNKNOWN';
+                statusBadge.className = 'badge rounded-pill text-uppercase';
+                
+                const terminalStatuses = ['complete', 'rejected', 'cancelled'];
+                if (orderStatus === 'complete') {
+                    statusBadge.classList.add('bg-success');
+                } else if (orderStatus === 'rejected') {
+                    statusBadge.classList.add('bg-danger');
+                } else if (orderStatus === 'cancelled') {
+                    statusBadge.classList.add('bg-secondary');
+                } else {
+                    statusBadge.classList.add('bg-primary');
+                }
+
+                // Show/hide components based on status
+                const isTerminal = terminalStatuses.includes(orderStatus);
+                const terminalAlert = document.getElementById('order-terminal-alert');
+                const modificationSection = document.getElementById('order-modification-section');
+                const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
+
+                if (isTerminal) {
+                    terminalAlert?.classList.remove('d-none');
+                    modificationSection?.classList.add('d-none');
+                    confirmCancelBtn?.classList.add('d-none');
+                } else {
+                    terminalAlert?.classList.add('d-none');
+                    modificationSection?.classList.remove('d-none');
+                    confirmCancelBtn?.classList.remove('d-none');
+
+                    // Pre-fill modification fields
+                    const qtyInput = document.getElementById('modify-order-qty');
+                    const priceInput = document.getElementById('modify-order-price');
+                    const typeSelect = document.getElementById('modify-order-type');
+
+                    if (qtyInput) qtyInput.value = orderQty;
+                    if (priceInput) priceInput.value = orderPrice;
+                    if (typeSelect) typeSelect.value = orderPt === 'MKT' ? 'MKT' : 'L';
+
+                    // Attach attributes to the form
+                    const modifyForm = document.getElementById('modify-order-form');
+                    if (modifyForm) {
+                        modifyForm.dataset.orderId = orderId;
+                        modifyForm.dataset.orderSymbol = orderSymbol;
+                        modifyForm.dataset.orderType = orderType;
+                        modifyForm.dataset.orderExch = orderExch;
+                        modifyForm.dataset.orderProd = orderProd;
+                    }
+                }
+
+                // Store order ID for cancellation confirmation
+                const cancelBtn = document.getElementById('confirm-cancel-btn');
+                if (cancelBtn) cancelBtn.dataset.orderId = orderId;
 
                 const cancelModal = new bootstrap.Modal(document.getElementById('cancelOrderModal'));
                 cancelModal.show();
+            });
+
+            // Handle modify order form submission
+            document.getElementById('modify-order-form')?.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const modifyForm = this;
+                const submitBtn = document.getElementById('submit-modify-btn');
+
+                const orderId = modifyForm.dataset.orderId;
+                const quantity = document.getElementById('modify-order-qty').value;
+                const price = document.getElementById('modify-order-price').value;
+                const orderType = document.getElementById('modify-order-type').value;
+
+                const payload = {
+                    order_id: orderId,
+                    quantity: quantity,
+                    price: price,
+                    order_type: orderType,
+                    trading_symbol: modifyForm.dataset.orderSymbol,
+                    transaction_type: modifyForm.dataset.orderType,
+                    exchange_segment: modifyForm.dataset.orderExch,
+                    product_type: modifyForm.dataset.orderProd
+                };
+
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...';
+                }
+
+                fetch('/modify_order_ajax/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify(payload)
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.status === 'success') {
+                        showNotification(result.message, 'success');
+                        const cancelModal = bootstrap.Modal.getInstance(document.getElementById('cancelOrderModal'));
+                        if (cancelModal) cancelModal.hide();
+                        setTimeout(() => refreshTradingData(), 1500);
+                    } else {
+                        showNotification(result.message || 'An unknown error occurred.', 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showNotification('A network error occurred. Please try again.', 'danger');
+                })
+                .finally(() => {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i> Apply Modification';
+                    }
+                });
             });
 
             // Confirm cancel order
@@ -3753,7 +3870,17 @@
                 let html = '';
                 orders.forEach(order => {
                     html += `
-                        <tr class="order-book-row" data-order-id="${order.nOrdNo}" data-order-symbol="${order.sym}" data-order-type="${order.trnsTp}" data-order-qty="${order.qty}" data-order-price="${order.prc}" style="cursor: pointer;">
+                        <tr class="order-book-row" 
+                            data-order-id="${order.nOrdNo}" 
+                            data-order-symbol="${order.sym}" 
+                            data-order-type="${order.trnsTp}" 
+                            data-order-qty="${order.qty}" 
+                            data-order-price="${order.prc}"
+                            data-order-status="${order.stat}"
+                            data-order-exch="${order.exSeg || ''}"
+                            data-order-prod="${order.prod || ''}"
+                            data-order-pt="${order.prcTp || ''}"
+                            style="cursor: pointer;">
                             <td class="small text-muted">${order.nOrdNo}</td>
                             <td>${order.ordDtTm}</td>
                             <td class="fw-bold">${order.sym}</td>
@@ -3832,31 +3959,46 @@
             }
 
             function updateLimitsUI(limits) {
+                if (!limits) return;
+
                 // Update the main numbers
                 const primaryPower = document.querySelector('.h3.fw-bold.text-primary');
-                if (primaryPower) primaryPower.textContent = '₹' + parseFloat(limits.available_trade).toFixed(2);
+                if (primaryPower) {
+                    const val = parseFloat(limits.available_trade);
+                    primaryPower.textContent = isNaN(val) ? '₹--' : '₹' + val.toFixed(2);
+                }
                 
                 const dangerMargin = document.querySelector('.h4.fw-bold.text-danger');
-                if (dangerMargin) dangerMargin.textContent = '₹' + parseFloat(limits.margin_used).toFixed(2);
+                if (dangerMargin) {
+                    const val = parseFloat(limits.margin_used);
+                    dangerMargin.textContent = isNaN(val) ? '₹--' : '₹' + val.toFixed(2);
+                }
                 
                 const warningBenefit = document.querySelector('.h4.fw-bold.text-warning');
-                if (warningBenefit) warningBenefit.textContent = '₹' + parseFloat(limits.unsettled_credit).toFixed(2);
+                if (warningBenefit) {
+                    const val = parseFloat(limits.unsettled_credit);
+                    warningBenefit.textContent = isNaN(val) ? '₹--' : '₹' + val.toFixed(2);
+                }
                 
                 const darkValue = document.querySelector('.h4.fw-bold.text-dark');
-                if (darkValue) darkValue.textContent = '₹' + parseFloat(limits.total_cash).toFixed(2);
+                if (darkValue) {
+                    const val = parseFloat(limits.total_cash);
+                    darkValue.textContent = isNaN(val) ? '₹--' : '₹' + val.toFixed(2);
+                }
                 
                 // Update collateral span
                 const collateralSpan = document.querySelector('.text-muted.small:last-of-type');
                 if (collateralSpan && collateralSpan.textContent.includes('Collateral')) {
-                    collateralSpan.textContent = 'Collateral: ₹' + parseFloat(limits.collateral).toFixed(2);
+                    const val = parseFloat(limits.collateral);
+                    collateralSpan.textContent = 'Collateral: ' + (isNaN(val) ? '₹--' : '₹' + val.toFixed(2));
                 }
                 
                 // Update breakdown details
                 const detailValues = document.querySelectorAll('#balanceDetails .col-6.text-end');
                 if (detailValues.length >= 3) {
-                    detailValues[0].textContent = '₹' + limits.total_cash;
-                    detailValues[1].textContent = '+ ₹' + limits.unsettled_credit;
-                    detailValues[2].textContent = '₹' + limits.available_trade;
+                    detailValues[0].textContent = (limits.total_cash !== undefined && limits.total_cash !== null && limits.total_cash !== '') ? '₹' + limits.total_cash : '₹--';
+                    detailValues[1].textContent = (limits.unsettled_credit !== undefined && limits.unsettled_credit !== null && limits.unsettled_credit !== '') ? '+ ₹' + limits.unsettled_credit : '+ ₹--';
+                    detailValues[2].textContent = (limits.available_trade !== undefined && limits.available_trade !== null && limits.available_trade !== '') ? '₹' + limits.available_trade : '₹--';
                 }
             }
             // --- End Refresh System ---

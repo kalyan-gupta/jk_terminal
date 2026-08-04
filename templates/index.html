@@ -172,15 +172,6 @@
     <main class="container py-4">
         <div id="notification-area" class="position-fixed top-0 end-0 p-3" style="z-index: 9999"></div>
 
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
-
         <!-- Combined Account Info and Limits Card -->
         <div class="card mb-4 border-start border-4 border-primary">
             <div class="card-header d-flex justify-content-between align-items-center bg-white">
@@ -195,32 +186,40 @@
                 </div>
             </div>
             <div class="card-body">
-                <div class="row g-4 text-center">
-                    <div class="col-md-3 border-end">
-                        <h4 class="small text-uppercase fw-bold text-muted mb-1">Available to Trade</h4>
-                        <p class="h3 fw-bold text-primary">₹{{ limits.available_trade|floatformat:2 }}</p>
-                        <span class="text-success small"><i class="bi bi-lightning-fill"></i> Net Limit</span>
+                <div class="row g-3 text-center">
+                    <div class="col-md-3">
+                        <div class="balance-sub-card">
+                            <h4 class="small text-uppercase fw-bold text-muted mb-2"><i class="bi bi-wallet2 text-primary me-1"></i> Available to Trade</h4>
+                            <p class="h3 fw-bold text-primary mb-2">{% if limits.available_trade is not None and limits.available_trade != "" %}₹{{ limits.available_trade|floatformat:2 }}{% else %}₹--{% endif %}</p>
+                            <span class="text-success small"><i class="bi bi-lightning-fill"></i> Net Limit</span>
+                        </div>
                     </div>
                     
-                    <div class="col-md-3 border-end">
-                        <h4 class="small text-uppercase fw-bold text-muted mb-1">Margin Used</h4>
-                        <p class="h4 fw-bold text-danger">₹{{ limits.margin_used|floatformat:2 }}</p>
-                        <span class="text-muted small">Current utilization</span>
-                    </div>
-
-                    <div class="col-md-3 border-end">
-                        <h4 class="small text-uppercase fw-bold text-muted mb-1">
-                            Sale Benefit
-                            <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="Credits from today's delivery sales available for new trades."></i>
-                        </h4>
-                        <p class="h4 fw-bold text-warning">₹{{ limits.unsettled_credit|floatformat:2 }}</p>
-                        <span class="text-muted small">CNC Sell Credit</span>
+                    <div class="col-md-3">
+                        <div class="balance-sub-card">
+                            <h4 class="small text-uppercase fw-bold text-muted mb-2"><i class="bi bi-pie-chart text-danger me-1"></i> Margin Used</h4>
+                            <p class="h4 fw-bold text-danger mb-2">{% if limits.margin_used is not None and limits.margin_used != "" %}₹{{ limits.margin_used|floatformat:2 }}{% else %}₹--{% endif %}</p>
+                            <span class="text-muted small">Current utilization</span>
+                        </div>
                     </div>
 
                     <div class="col-md-3">
-                        <h4 class="small text-uppercase fw-bold text-muted mb-1">Account Value</h4>
-                        <p class="h4 fw-bold text-dark">₹{{ limits.total_cash|floatformat:2 }}</p>
-                        <span class="text-muted small">Collateral: ₹{{ limits.collateral|floatformat:2 }}</span>
+                        <div class="balance-sub-card">
+                            <h4 class="small text-uppercase fw-bold text-muted mb-2">
+                                <i class="bi bi-percent text-warning me-1"></i> Sale Benefit
+                                <i class="bi bi-info-circle small text-muted" data-bs-toggle="tooltip" title="Credits from today's delivery sales available for new trades."></i>
+                            </h4>
+                            <p class="h4 fw-bold text-warning mb-2">{% if limits.unsettled_credit is not None and limits.unsettled_credit != "" %}₹{{ limits.unsettled_credit|floatformat:2 }}{% else %}₹--{% endif %}</p>
+                            <span class="text-muted small">CNC Sell Credit</span>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <div class="balance-sub-card">
+                            <h4 class="small text-uppercase fw-bold text-muted mb-2"><i class="bi bi-safe text-info me-1"></i> Account Value</h4>
+                            <p class="h4 fw-bold text-dark mb-2">{% if limits.total_cash is not None and limits.total_cash != "" %}₹{{ limits.total_cash|floatformat:2 }}{% else %}₹--{% endif %}</p>
+                            <span class="text-muted small">Collateral: {% if limits.collateral is not None and limits.collateral != "" %}₹{{ limits.collateral|floatformat:2 }}{% else %}₹--{% endif %}</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -232,12 +231,12 @@
                 <div class="collapse mt-2" id="balanceDetails">
                     <div class="row text-start px-3 py-2 small">
                         <div class="col-6 mb-1">Net Cash Balance:</div>
-                        <div class="col-6 text-end">₹{{ limits.total_cash }}</div>
+                        <div class="col-6 text-end">{% if limits.total_cash is not None and limits.total_cash != "" %}₹{{ limits.total_cash }}{% else %}₹--{% endif %}</div>
                         <div class="col-6 mb-1">Sale Credits (Today):</div>
-                        <div class="col-6 text-end text-success">+ ₹{{ limits.unsettled_credit }}</div>
+                        <div class="col-6 text-end text-success">{% if limits.unsettled_credit is not None and limits.unsettled_credit != "" %}+ ₹{{ limits.unsettled_credit }}{% else %}+ ₹--{% endif %}</div>
                         <div class="col-12"><hr class="my-1"></div>
                         <div class="col-6 fw-bold">Actual Trading Power:</div>
-                        <div class="col-6 text-end fw-bold">₹{{ limits.available_trade }}</div>
+                        <div class="col-6 text-end fw-bold">{% if limits.available_trade is not None and limits.available_trade != "" %}₹{{ limits.available_trade }}{% else %}₹--{% endif %}</div>
                     </div>
                 </div>
             </div>
@@ -544,7 +543,17 @@
                                 </thead>
                                 <tbody>
                                     {% for order in order_book %}
-                                    <tr class="order-book-row" data-order-id="{{ order.nOrdNo }}" data-order-symbol="{{ order.sym }}" data-order-type="{{ order.trnsTp }}" data-order-qty="{{ order.qty }}" data-order-price="{{ order.prc }}" style="cursor: pointer;">
+                                    <tr class="order-book-row" 
+                                        data-order-id="{{ order.nOrdNo }}" 
+                                        data-order-symbol="{{ order.sym }}" 
+                                        data-order-type="{{ order.trnsTp }}" 
+                                        data-order-qty="{{ order.qty }}" 
+                                        data-order-price="{{ order.prc }}"
+                                        data-order-status="{{ order.stat }}"
+                                        data-order-exch="{{ order.exSeg }}"
+                                        data-order-prod="{{ order.prod }}"
+                                        data-order-pt="{{ order.prcTp }}"
+                                        style="cursor: pointer;">
                                         <td class="small text-muted">{{ order.nOrdNo }}</td>
                                         <td>{{ order.ordDtTm }}</td>
                                         <td class="fw-bold">{{ order.sym }}</td>
@@ -831,46 +840,85 @@
             </div>
         </div>
 
-        <!-- Cancel Order Confirmation Modal -->
+        <!-- Order Action Modal (Modify/Cancel) -->
         <div class="modal fade" id="cancelOrderModal" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">Cancel Order</h5>
+                        <h5 class="modal-title" id="order-modal-title">Order Details & Actions</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <p>Are you sure you want to cancel this order?</p>
-                        <div class="card bg-light">
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-sm-6"><strong>Order ID:</strong></div>
-                                    <div class="col-sm-6" id="cancel-order-id">-</div>
+                        <!-- Alert for terminal states -->
+                        <div id="order-terminal-alert" class="alert alert-warning d-none" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            This order is in a terminal status and cannot be modified or cancelled.
+                        </div>
+
+                        <!-- Current Order Info -->
+                        <div class="card bg-light mb-3">
+                            <div class="card-body py-2 px-3 small">
+                                <div class="row mb-1">
+                                    <div class="col-6"><strong>Order ID:</strong></div>
+                                    <div class="col-6 text-end" id="cancel-order-id">-</div>
                                 </div>
-                                <div class="row">
-                                    <div class="col-sm-6"><strong>Symbol:</strong></div>
-                                    <div class="col-sm-6" id="cancel-order-symbol">-</div>
+                                <div class="row mb-1">
+                                    <div class="col-6"><strong>Symbol:</strong></div>
+                                    <div class="col-6 text-end" id="cancel-order-symbol">-</div>
                                 </div>
-                                <div class="row">
-                                    <div class="col-sm-6"><strong>Type:</strong></div>
-                                    <div class="col-sm-6" id="cancel-order-type">-</div>
+                                <div class="row mb-1">
+                                    <div class="col-6"><strong>Type:</strong></div>
+                                    <div class="col-6 text-end" id="cancel-order-type">-</div>
                                 </div>
-                                <div class="row">
-                                    <div class="col-sm-6"><strong>Quantity:</strong></div>
-                                    <div class="col-sm-6" id="cancel-order-qty">-</div>
+                                <div class="row mb-1">
+                                    <div class="col-6"><strong>Current Status:</strong></div>
+                                    <div class="col-6 text-end"><span class="badge rounded-pill bg-secondary text-uppercase" id="order-action-status">-</span></div>
                                 </div>
-                                <div class="row">
-                                    <div class="col-sm-6"><strong>Price:</strong></div>
-                                    <div class="col-sm-6" id="cancel-order-price">-</div>
+                                <div class="row mb-1 d-none" id="orig-qty-row">
+                                    <div class="col-6"><strong>Placed Qty:</strong></div>
+                                    <div class="col-6 text-end" id="cancel-order-qty">-</div>
+                                </div>
+                                <div class="row mb-1 d-none" id="orig-price-row">
+                                    <div class="col-6"><strong>Placed Price:</strong></div>
+                                    <div class="col-6 text-end" id="cancel-order-price">-</div>
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Modification Form (Only for non-terminal orders) -->
+                        <div id="order-modification-section">
+                            <h6 class="border-bottom pb-2 mb-3"><i class="bi bi-pencil-square me-1"></i> Modify Order</h6>
+                            <form id="modify-order-form">
+                                <div class="row g-2 mb-3">
+                                    <div class="col-md-6">
+                                        <label for="modify-order-qty" class="form-label small">Quantity</label>
+                                        <input type="number" class="form-control form-control-sm" id="modify-order-qty" min="1" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="modify-order-price" class="form-label small">Price (₹)</label>
+                                        <input type="number" class="form-control form-control-sm" id="modify-order-price" step="0.05" min="0" required>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="modify-order-type" class="form-label small">Order Type</label>
+                                    <select class="form-select form-select-sm" id="modify-order-type">
+                                        <option value="L">Limit</option>
+                                        <option value="MKT">Market</option>
+                                    </select>
+                                </div>
+                                <div class="d-grid mb-2">
+                                    <button type="submit" class="btn btn-sm btn-primary" id="submit-modify-btn">
+                                        <i class="bi bi-check-circle me-1"></i> Apply Modification
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Keep Order</button>
-                        <button type="button" class="btn btn-danger" id="confirm-cancel-btn">
-                            <i class="bi bi-x-circle me-1"></i> Yes, Cancel Order
+                    <div class="modal-footer justify-content-between" id="order-actions-footer">
+                        <button type="button" class="btn btn-sm btn-danger" id="confirm-cancel-btn">
+                            <i class="bi bi-x-circle me-1"></i> Cancel Order
                         </button>
+                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
                     </div>
                 </div>
             </div>
@@ -1186,7 +1234,7 @@
         }
 
         // System Diagnostics Functions
-        function updateDiagSummary(isSdkAuth) {
+        window.updateDiagSummary = function(isSdkAuth) {
             const dot = document.getElementById('diag-pulse-dot');
             const text = document.getElementById('diag-summary-text');
             const btn = document.getElementById('diagnostics-btn');
@@ -1194,20 +1242,29 @@
             
             let wsActive = typeof tradeSocket !== 'undefined' && tradeSocket && tradeSocket.readyState === WebSocket.OPEN;
             
+            dot.className = 'pulse-dot';
+            dot.removeAttribute('style'); // Remove inline style override so CSS classes work
+
             if (isSdkAuth && wsActive) {
-                dot.style.backgroundColor = '#198754'; // success green
-                text.textContent = 'API Connected';
-                btn.className = 'btn btn-sm dropdown-toggle d-flex align-items-center gap-1 border border-success text-success bg-transparent';
+                if (window.isFeedPaused) {
+                    dot.classList.add('pulse-yellow');
+                    text.textContent = 'Feed Paused';
+                    btn.className = 'btn btn-sm dropdown-toggle d-flex align-items-center gap-1 border border-warning text-warning bg-transparent';
+                } else {
+                    dot.classList.add('pulse-green');
+                    text.textContent = 'API Connected';
+                    btn.className = 'btn btn-sm dropdown-toggle d-flex align-items-center gap-1 border border-success text-success bg-transparent';
+                }
             } else if (isSdkAuth) {
-                dot.style.backgroundColor = '#ffc107'; // warning yellow
+                dot.classList.add('pulse-yellow');
                 text.textContent = 'No Live Feed';
                 btn.className = 'btn btn-sm dropdown-toggle d-flex align-items-center gap-1 border border-warning text-warning bg-transparent';
             } else {
-                dot.style.backgroundColor = '#dc3545'; // danger red
+                dot.classList.add('pulse-red');
                 text.textContent = 'SDK Inactive';
                 btn.className = 'btn btn-sm dropdown-toggle d-flex align-items-center gap-1 border border-danger text-danger bg-transparent';
             }
-        }
+        };
 
         window.checkDiagnostics = function() {
             // Check WebSocket status
@@ -1223,8 +1280,13 @@
                             wsStatusEl.className = 'badge bg-warning-subtle text-warning-emphasis border border-warning-subtle';
                             break;
                         case WebSocket.OPEN:
-                            wsStatusEl.textContent = 'Live Feed Active';
-                            wsStatusEl.className = 'badge bg-success-subtle text-success-emphasis border border-success-subtle';
+                            if (window.isFeedPaused) {
+                                wsStatusEl.textContent = 'Feed Paused';
+                                wsStatusEl.className = 'badge bg-warning-subtle text-warning-emphasis border border-warning-subtle';
+                            } else {
+                                wsStatusEl.textContent = 'Live Feed Active';
+                                wsStatusEl.className = 'badge bg-success-subtle text-success-emphasis border border-success-subtle';
+                            }
                             break;
                         case WebSocket.CLOSING:
                             wsStatusEl.textContent = 'Closing...';

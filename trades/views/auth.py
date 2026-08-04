@@ -464,6 +464,8 @@ def admin_settings_view(request):
         settings_obj.order_placed_template = request.POST.get('order_placed_template', '')
         settings_obj.order_status_subject = request.POST.get('order_status_subject', '')
         settings_obj.order_status_template = request.POST.get('order_status_template', '')
+        settings_obj.order_modified_subject = request.POST.get('order_modified_subject', '')
+        settings_obj.order_modified_template = request.POST.get('order_modified_template', '')
         
         new_password = request.POST.get('host_password', '')
         if new_password:
@@ -651,6 +653,59 @@ def admin_delete_session(request, session_id):
             messages.error(request, f"Error terminating session: {str(e)}")
             
     return redirect('admin_settings')
+
+
+@login_required_with_session_check
+def admin_bulk_delete_sessions(request):
+    """Forcefully terminate multiple user sessions based on selection or action"""
+    if not request.user.is_superuser:
+        messages.error(request, "Access denied. Superuser only.")
+        return redirect('index')
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        current_session_key = request.session.session_key
+        
+        if action == 'delete_selected':
+            session_ids = request.POST.getlist('session_ids')
+            if session_ids:
+                # Exclude current session to prevent accidental self-logout
+                activities = SessionActivity.objects.filter(id__in=session_ids).exclude(session_key=current_session_key)
+                count = activities.count()
+                for activity in activities:
+                    if activity.session_key:
+                        Session.objects.filter(session_key=activity.session_key).delete()
+                    activity.delete()
+                messages.success(request, f"Successfully terminated {count} selected session(s).")
+                logger.info(f"Admin {request.user.username} bulk terminated {count} selected session(s).")
+            else:
+                messages.warning(request, "No sessions were selected.")
+                
+        elif action == 'delete_all_except_current':
+            activities = SessionActivity.objects.exclude(session_key=current_session_key)
+            count = activities.count()
+            for activity in activities:
+                if activity.session_key:
+                    Session.objects.filter(session_key=activity.session_key).delete()
+                activity.delete()
+            messages.success(request, f"Successfully terminated {count} other session(s).")
+            logger.info(f"Admin {request.user.username} terminated all other sessions ({count} sessions).")
+            
+        elif action == 'delete_inactive_sdk':
+            activities = SessionActivity.objects.filter(sdk_session_active=False).exclude(session_key=current_session_key)
+            count = activities.count()
+            for activity in activities:
+                if activity.session_key:
+                    Session.objects.filter(session_key=activity.session_key).delete()
+                activity.delete()
+            messages.success(request, f"Successfully terminated {count} SDK-inactive session(s).")
+            logger.info(f"Admin {request.user.username} terminated {count} SDK-inactive session(s).")
+            
+        else:
+            messages.error(request, "Invalid bulk action specified.")
+            
+    return redirect('admin_settings')
+
 
 
 @login_required_with_session_check

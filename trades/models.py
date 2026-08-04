@@ -467,6 +467,79 @@ DEFAULT_ORDER_STATUS_TEMPLATE = """<!DOCTYPE html>
 </html>"""
 
 
+DEFAULT_ORDER_MODIFIED_TEMPLATE = """<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f5f7; margin: 0; padding: 0; color: #1e293b; }
+    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; padding: 32px 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+    .content { padding: 32px 24px; line-height: 1.6; }
+    .footer { text-align: center; padding: 24px; font-size: 12px; color: #64748b; background-color: #f8fafc; border-top: 1px solid #f1f5f9; }
+    .details-list { width: 100%; border-collapse: collapse; margin: 24px 0; }
+    .details-list td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
+    .details-list td.label { font-weight: 600; color: #475569; width: 40%; }
+    .details-list td.value { color: #0f172a; }
+    .badge-modify { display: inline-block; padding: 2px 8px; background-color: #dbeafe; color: #1d4ed8; border-radius: 4px; font-weight: 600; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>JK Terminal</h1>
+    </div>
+    <div class="content">
+      <p>Hello <strong>{{ username }}</strong>,</p>
+      <p>Your trade order has been successfully <strong>MODIFIED</strong> with new parameters:</p>
+      
+      <table class="details-list">
+        <tr>
+          <td class="label">Instrument</td>
+          <td class="value"><strong>{{ trading_symbol }}</strong></td>
+        </tr>
+        <tr>
+          <td class="label">Transaction Type</td>
+          <td class="value">
+            <span class="badge-modify">{{ transaction_type }}</span>
+          </td>
+        </tr>
+        <tr>
+          <td class="label">New Quantity</td>
+          <td class="value">{{ quantity }}</td>
+        </tr>
+        <tr>
+          <td class="label">New Price</td>
+          <td class="value">₹{{ price }}</td>
+        </tr>
+        <tr>
+          <td class="label">Order Type</td>
+          <td class="value">{{ order_type }}</td>
+        </tr>
+        <tr>
+          <td class="label">Product</td>
+          <td class="value">{{ product_type }}</td>
+        </tr>
+        <tr>
+          <td class="label">Exchange</td>
+          <td class="value">{{ exchange_segment }}</td>
+        </tr>
+        <tr>
+          <td class="label">Order ID</td>
+          <td class="value"><code>{{ order_id }}</code></td>
+        </tr>
+      </table>
+      
+      <p>Regards,<br>JK Terminal</p>
+    </div>
+    <div class="footer">
+      This is an automated notification from JK Terminal. Please do not reply to this email.
+    </div>
+  </div>
+</body>
+</html>"""
+
+
 class SMTPSettings(models.Model):
     """Store global SMTP settings editable by superusers"""
     host = models.CharField(max_length=255, default='smtp.gmail.com')
@@ -496,6 +569,9 @@ class SMTPSettings(models.Model):
 
     order_status_subject = models.CharField(max_length=255, default='JK Terminal - Trade Order: {{ transaction_type }} {{ quantity }} {{ trading_symbol }} is {{ last_status }}')
     order_status_template = models.TextField(default=DEFAULT_ORDER_STATUS_TEMPLATE)
+
+    order_modified_subject = models.CharField(max_length=255, default='JK Terminal - Trade Order Modified: {{ transaction_type }} {{ quantity }} {{ trading_symbol }}')
+    order_modified_template = models.TextField(default=DEFAULT_ORDER_MODIFIED_TEMPLATE)
     
     class Meta:
         verbose_name = "SMTP Settings"
