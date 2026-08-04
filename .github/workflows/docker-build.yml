@@ -10,8 +10,10 @@ on:
         type: choice
         options:
           - dev
-          - integration
-          - master
+      commit_id:
+        description: 'Optional: Specific commit ID to build from'
+        required: false
+        type: string
 
 jobs:
   build:
@@ -19,6 +21,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_id }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -36,13 +40,8 @@ jobs:
       - name: Determine Target Tag
         id: vars
         run: |
-          if [ "${{ github.event.inputs.environment }}" = "master" ]; then
-            echo "tag=latest" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event.inputs.environment }}" = "integration" ]; then
-            echo "tag=int" >> $GITHUB_OUTPUT
-          else
-            echo "tag=dev" >> $GITHUB_OUTPUT
-          fi
+          echo "tag=dev" >> $GITHUB_OUTPUT
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: Build and Push
         uses: docker/build-push-action@v5
@@ -52,4 +51,4 @@ jobs:
           push: true
           tags: |
             lingamkalyangupta/jk_terminal:${{ steps.vars.outputs.tag }}
-            lingamkalyangupta/jk_terminal:${{ steps.vars.outputs.tag }}-${{ github.sha }}
+            lingamkalyangupta/jk_terminal:${{ steps.vars.outputs.tag }}-${{ steps.vars.outputs.sha }}
