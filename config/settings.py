@@ -59,31 +59,32 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
-    'trading_platform.middleware.RequestLoggingMiddleware',
-    'trading_platform.middleware.RestartDetectionMiddleware',
+    'config.middleware.RequestLoggingMiddleware',
+    'config.middleware.RestartDetectionMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'trades.auth_middleware.SessionExpiryMiddleware',
 ]
 
-ROOT_URLCONF = 'trading_platform.urls'
+ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'trades.context_processors.platform_settings',
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'trading_platform.wsgi.application'
-ASGI_APPLICATION = 'trading_platform.asgi.application'
+WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = 'config.asgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
@@ -98,6 +99,9 @@ DATABASES = {
         'NAME': BASE_DIR / 'scrip_cache.sqlite3',
     }
 }
+
+DATABASE_ROUTERS = ['trades.router.ScripCacheRouter']
+
 
 
 # Password validation
@@ -136,6 +140,9 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_DIRS = [
+    BASE_DIR / 'static',
+]
 
 # Kotak Neo Trade API credentials
 # NOTE: Credentials are now managed through the database/UI and encrypted using ENCRYPTION_KEY from .env
@@ -181,19 +188,19 @@ LOGGING = {
     'disable_existing_loggers': False,
     'filters': {
         'request_id': {
-            '()': 'trading_platform.logging_utils.RequestIDFilter',
+            '()': 'config.logging_utils.RequestIDFilter',
         },
     },
     'formatters': {
         'multiline': {
-            '()': 'trading_platform.logging_utils.MultiLineFormatter',
+            '()': 'config.logging_utils.MultiLineFormatter',
             'format': '%(asctime)s - %(levelname)s - [%(request_id)s|%(request_user)s] - %(message)s'
         },
     },
     'handlers': {
         'async_file': {
             'level': 'DEBUG',
-            'class': 'trading_platform.logging_utils.SimpleAsyncFileHandler',
+            'class': 'config.logging_utils.SimpleAsyncFileHandler',
             'filename': os.path.join(BASE_DIR, 'app_activity.log'),
             'formatter': 'multiline',
             'filters': ['request_id'],

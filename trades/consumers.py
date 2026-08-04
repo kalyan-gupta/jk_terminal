@@ -7,7 +7,7 @@ from collections import defaultdict
 from channels.generic.websocket import WebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
 from .kotak_neo_api import KotakNeoAPI
-from trading_platform.logging_utils import request_id_var, request_user_var
+from config.logging_utils import request_id_var, request_user_var
 
 logger = logging.getLogger(__name__)
 SERVER_START_TIME = time.time()
