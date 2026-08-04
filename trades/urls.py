@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, views_basket
+from . import views
 
 urlpatterns = [
     # Authentication URLs
@@ -29,12 +29,14 @@ urlpatterns = [
     path('admin-settings/user/<int:user_id>/reset-password/', views.admin_reset_user_password, name='admin_reset_user_password'),
     path('admin-settings/user/add/', views.admin_add_user_view, name='admin_add_user'),
     path('admin-settings/session/<int:session_id>/delete/', views.admin_delete_session, name='admin_delete_session'),
+    path('admin-settings/sessions/bulk-delete/', views.admin_bulk_delete_sessions, name='admin_bulk_delete_sessions'),
     
     # Trading URLs (Protected)
     path('', views.index, name='index'),
     path('place_trade_ajax/', views.place_trade_ajax, name='place_trade_ajax'),
     path('check_margin_ajax/', views.check_margin_ajax, name='check_margin_ajax'),
     path('cancel_order_ajax/', views.cancel_order_ajax, name='cancel_order_ajax'),
+    path('modify_order_ajax/', views.modify_order_ajax, name='modify_order_ajax'),
     path('search_scrips_ajax/', views.search_scrips_ajax, name='search_scrips_ajax'),
     path('search_scrip_cache/', views.search_scrip_cache, name='search_scrip_cache'),
     path('refresh_scrip_master/', views.refresh_scrip_master, name='refresh_scrip_master'),
@@ -54,13 +56,13 @@ urlpatterns = [
     path('get_limits_ajax/', views.get_limits_ajax, name='get_limits_ajax'),
     
     # Basket URLs
-    path('basket/add/', views_basket.add_to_basket_ajax, name='add_to_basket_ajax'),
-    path('basket/get/', views_basket.get_basket_ajax, name='get_basket_ajax'),
-    path('basket/remove/', views_basket.remove_from_basket_ajax, name='remove_from_basket_ajax'),
-    path('basket/clear/', views_basket.clear_basket_ajax, name='clear_basket_ajax'),
-    path('basket/update_sequence/', views_basket.update_basket_sequence_ajax, name='update_basket_sequence_ajax'),
-    path('basket/update_item/', views_basket.update_basket_item_ajax, name='update_basket_item_ajax'),
-    path('basket/execute/', views_basket.execute_basket_ajax, name='execute_basket_ajax'),
-    path('basket/check_margin/', views_basket.check_basket_margin_ajax, name='check_basket_margin_ajax'),
-    path('basket/reorder/', views_basket.reorder_basket_ajax, name='reorder_basket_ajax'),
+    path('basket/add/', views.add_to_basket_ajax, name='add_to_basket_ajax'),
+    path('basket/get/', views.get_basket_ajax, name='get_basket_ajax'),
+    path('basket/remove/', views.remove_from_basket_ajax, name='remove_from_basket_ajax'),
+    path('basket/clear/', views.clear_basket_ajax, name='clear_basket_ajax'),
+    path('basket/update_sequence/', views.update_basket_sequence_ajax, name='update_basket_sequence_ajax'),
+    path('basket/update_item/', views.update_basket_item_ajax, name='update_basket_item_ajax'),
+    path('basket/execute/', views.execute_basket_ajax, name='execute_basket_ajax'),
+    path('basket/check_margin/', views.check_basket_margin_ajax, name='check_basket_margin_ajax'),
+    path('basket/reorder/', views.reorder_basket_ajax, name='reorder_basket_ajax'),
 ]

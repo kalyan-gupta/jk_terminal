@@ -1,215 +1,5 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Settings - JK Terminal</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        :root {
-            --bs-primary-rgb: 102, 126, 234;
-            --bs-secondary-rgb: 118, 75, 162;
-
-            /* Light Theme Custom Properties */
-            --bg-primary: #eef2f5;
-            --card-bg: #ffffff;
-            --card-header-bg: #ffffff;
-            --text-primary: #212529;
-            --text-secondary: #6c757d;
-            --border-color: #e9ecef;
-            --nav-bg: #212529;
-            --glass-blur: none;
-            --card-shadow: 0 4px 6px rgba(0,0,0,.04);
-            --input-bg: #ffffff;
-            --input-border: #ced4da;
-            --input-text: #212529;
-            --dropdown-bg: #ffffff;
-            --dropdown-item-hover: #f8f9fa;
-        }
-
-        [data-theme="dark"] {
-            --bg-primary: #0f172a;
-            --card-bg: #1e293b;
-            --card-header-bg: #1e293b;
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --border-color: #334155;
-            --nav-bg: #0f172a;
-            --glass-blur: none;
-            --card-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-            --input-bg: #0f172a;
-            --input-border: #475569;
-            --input-text: #f1f5f9;
-            --dropdown-bg: #1e293b;
-            --dropdown-item-hover: #334155;
-        }
-
-        [data-theme="glass"] {
-            --bg-primary: #020617;
-            --card-bg: rgba(15, 23, 42, 0.65);
-            --card-header-bg: rgba(15, 23, 42, 0.7);
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --border-color: rgba(255, 255, 255, 0.08);
-            --nav-bg: rgba(15, 23, 42, 0.85);
-            --glass-blur: blur(12px);
-            --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-            --input-bg: rgba(2, 6, 23, 0.5);
-            --input-border: rgba(255, 255, 255, 0.1);
-            --input-text: #f8fafc;
-            --dropdown-bg: rgba(15, 23, 42, 0.95);
-            --dropdown-item-hover: rgba(167, 139, 250, 0.15);
-        }
-
-        body {
-            background-color: var(--bg-primary);
-            color: var(--text-primary);
-            font-family: 'Inter', sans-serif;
-            transition: background-color 0.25s, color 0.25s;
-        }
-
-        .navbar {
-            box-shadow: 0 2px 4px rgba(0,0,0,.08);
-            background-color: var(--nav-bg) !important;
-        }
-
-        .card {
-            background-color: var(--card-bg) !important;
-            backdrop-filter: var(--glass-blur);
-            -webkit-backdrop-filter: var(--glass-blur);
-            border: 1px solid var(--border-color) !important;
-            border-radius: .75rem;
-            box-shadow: var(--card-shadow);
-            color: var(--text-primary);
-        }
-
-        .card-header {
-            background-color: var(--card-header-bg) !important;
-            border-bottom: 1px solid var(--border-color) !important;
-            font-weight: 600;
-            color: var(--text-primary);
-            padding: 1.5rem;
-        }
-
-        .form-label {
-            font-weight: 500;
-            color: var(--text-primary);
-        }
-        
-        .form-control, .form-select, .form-check-input {
-            border: 1px solid #dee2e6;
-            border-radius: .5rem;
-            padding: 0.625rem 0.875rem;
-        }
-        
-        .form-control:focus, .form-select:focus, .form-check-input:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
-        }
-        
-        .btn-primary {
-            background: linear-gradient(to right, #667eea 0%, #764ba2 100%);
-            border: none;
-        }
-        
-        .btn-primary:hover {
-            background: linear-gradient(to right, #764ba2 0%, #667eea 100%);
-        }
-        
-        .alert {
-            border: none;
-            border-radius: .5rem;
-        }
-        
-        .profile-header {
-            background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-            color: white;
-            padding: 2rem;
-            border-radius: .75rem;
-            margin-bottom: 2rem;
-        }
-        
-        .profile-avatar {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            background-color: rgba(255, 255, 255, 0.2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2rem;
-            margin-bottom: 1rem;
-        }
-
-        .form-group-inline {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-        }
-        
-        @media (max-width: 768px) {
-            .form-group-inline {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        .section-title {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-top: 2rem;
-            margin-bottom: 1rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 2px solid #667eea;
-        }
-
-        /* Global Table Contrast & Color Theming */
-        .table {
-            color: var(--text-primary) !important;
-            border-color: var(--border-color) !important;
-        }
-        .table th, .table td {
-            background-color: transparent !important;
-            color: var(--text-primary) !important;
-            border-color: var(--border-color) !important;
-        }
-        .table thead, .table-light {
-            background-color: var(--bg-secondary) !important;
-            border-color: var(--border-color) !important;
-        }
-        .table thead th {
-            color: var(--text-secondary) !important;
-        }
-        .table-hover tbody tr:hover td {
-            background-color: var(--table-hover-bg) !important;
-            color: var(--text-primary) !important;
-        }
-    </style>
-</head>
-<body>
-    <script>
-        (function() {
-            const savedTheme = localStorage.getItem('app-theme') || 'light';
-            document.documentElement.setAttribute('data-theme', savedTheme);
-        })();
-    </script>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
-        <div class="container-fluid">
-            <a class="navbar-brand fw-bold" href="{% url 'index' %}">
-                <i class="bi bi-graph-up-arrow me-2"></i>
-                JK Terminal
-            </a>
-            <div class="d-flex align-items-center">
-                <span class="navbar-text me-3">
-                    <i class="bi bi-person-circle"></i> {{ request.user.username }}
-                </span>
-                <a href="{% url 'logout' %}" class="btn btn-outline-light btn-sm">
-                    <i class="bi bi-power"></i> Logout
-                </a>
-            </div>
-        </div>
-    </nav>
+{% extends 'base.html' %}
+{% block content %}
     
     <main class="container py-4">
         <div class="profile-header">
@@ -219,15 +9,6 @@
             <h1 class="h2 mb-1">Admin Settings</h1>
             <p class="mb-2">Manage global configurations for JK Terminal (Superuser Only)</p>
         </div>
-        
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
         
         <div class="card mb-4">
             <div class="card-header">
@@ -486,6 +267,28 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Trade Order Modification Notification Template -->
+                        <div class="accordion-item card border-0 mb-2">
+                            <h2 class="accordion-header" id="headingOrderModified">
+                                <button class="accordion-button collapsed fw-bold rounded" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOrderModified" aria-expanded="false" aria-controls="collapseOrderModified">
+                                    <i class="bi bi-pencil-square me-2"></i> Trade Order Modification Notification Template
+                                </button>
+                            </h2>
+                            <div id="collapseOrderModified" class="accordion-collapse collapse" aria-labelledby="headingOrderModified" data-bs-parent="#templatesAccordion">
+                                <div class="accordion-body bg-light bg-opacity-10 p-3">
+                                    <div class="mb-3">
+                                        <label for="order_modified_subject" class="form-label">Email Subject</label>
+                                        <input type="text" class="form-control" id="order_modified_subject" name="order_modified_subject" value="{{ settings.order_modified_subject }}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="order_modified_template" class="form-label">HTML Email Body</label>
+                                        <textarea class="form-control font-monospace" id="order_modified_template" name="order_modified_template" rows="12" style="font-size: 0.85rem; color: var(--text-primary); background-color: var(--input-bg);">{{ settings.order_modified_template }}</textarea>
+                                        <div class="form-text">Available placeholders: <code>{% templatetag openvariable %} username {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} trading_symbol {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} transaction_type {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} quantity {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} price {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} order_type {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} product_type {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} exchange_segment {% templatetag closevariable %}</code>, <code>{% templatetag openvariable %} order_id {% templatetag closevariable %}</code></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     
                     <div class="mt-4 d-flex gap-2">
@@ -575,17 +378,48 @@
                     </table>
                 </div>
             </div>
+        </div>
+
         <div class="card mt-4">
-            <div class="card-header">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-3">
                 <h5 class="mb-0"><i class="bi bi-broadcast me-2"></i>Active User Sessions</h5>
+                <!-- Search Filter Input -->
+                <div class="input-group input-group-sm" style="max-width: 300px;">
+                    <span class="input-group-text bg-light text-muted"><i class="bi bi-search"></i></span>
+                    <input type="text" id="sessionSearch" class="form-control" placeholder="Search by user or IP...">
+                </div>
             </div>
             <div class="card-body p-0">
-                <p class="text-muted small px-4 pt-3 mb-2">These are current active browser sessions. Terminating a session will immediately log out the user from that browser/tab.</p>
+                <div class="px-4 pt-3 pb-3 d-flex flex-wrap align-items-center justify-content-between gap-3 bg-light border-bottom">
+                    <p class="text-muted small mb-0">These are current active browser sessions. Terminating a session will immediately log out the user from that browser/tab.</p>
+                    
+                    <!-- Bulk Action Controls -->
+                    <div class="d-flex align-items-center gap-2">
+                        <form method="post" action="{% url 'admin_bulk_delete_sessions' %}" id="bulkSessionForm" class="d-flex align-items-center gap-2 m-0">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" id="bulkActionInput" value="">
+                            
+                            <button type="button" class="btn btn-sm btn-outline-danger" id="btnTerminateSelected" disabled>
+                                <i class="bi bi-dash-circle me-1"></i> Terminate Selected (<span id="selectedCount">0</span>)
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-warning" id="btnTerminateInactiveSDK">
+                                <i class="bi bi-shield-slash me-1"></i> Terminate SDK Inactive
+                            </button>
+                            <button type="button" class="btn btn-sm btn-danger" id="btnTerminateAllOthers">
+                                <i class="bi bi-x-octagon-fill me-1"></i> Terminate All Others
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
+                    <table class="table table-hover align-middle mb-0" id="sessionsTable">
                         <thead class="table-light">
                             <tr>
-                                <th class="ps-4">User</th>
+                                <th class="ps-4" style="width: 40px;">
+                                    <input type="checkbox" class="form-check-input" id="selectAllSessions">
+                                </th>
+                                <th>User</th>
                                 <th>IP Address</th>
                                 <th>Last Activity</th>
                                 <th>SDK Status</th>
@@ -594,8 +428,15 @@
                         </thead>
                         <tbody>
                             {% for session in active_sessions %}
-                            <tr {% if session.session_key == request.session.session_key %}class="table-primary opacity-75"{% endif %}>
+                            <tr {% if session.session_key == request.session.session_key %}class="table-primary opacity-75"{% endif %} data-username="{{ session.user.username|lower }}" data-fullname="{{ session.user.get_full_name|lower }}" data-ip="{{ session.ip_address|default:"" }}">
                                 <td class="ps-4">
+                                    {% if session.session_key != request.session.session_key %}
+                                        <input type="checkbox" class="form-check-input session-checkbox" name="session_ids" value="{{ session.id }}" form="bulkSessionForm">
+                                    {% else %}
+                                        <input type="checkbox" class="form-check-input" disabled title="Cannot terminate current session">
+                                    {% endif %}
+                                </td>
+                                <td>
                                     <div class="fw-medium">{{ session.user.username }}</div>
                                     <div class="text-muted small">{{ session.user.get_full_name|default:"" }}</div>
                                 </td>
@@ -626,7 +467,7 @@
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="5" class="text-center py-4 text-muted">No active sessions found.</td>
+                                <td colspan="6" class="text-center py-4 text-muted">No active sessions found.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -729,92 +570,106 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        function openResetPasswordModal(userId, username) {
-            document.getElementById('resetTargetUsername').innerText = username;
-            document.getElementById('resetPasswordForm').action = "/admin-settings/user/" + userId + "/reset-password/";
-            var modal = new bootstrap.Modal(document.getElementById('resetPasswordModal'));
-            modal.show();
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Session search filter
+    const sessionSearchInput = document.getElementById('sessionSearch');
+    const sessionsTable = document.getElementById('sessionsTable');
+    const sessionRows = sessionsTable ? sessionsTable.querySelectorAll('tbody tr') : [];
+
+    if (sessionSearchInput) {
+        sessionSearchInput.addEventListener('input', function() {
+            const query = this.value.toLowerCase().trim();
+            sessionRows.forEach(row => {
+                const username = row.getAttribute('data-username') || '';
+                const fullname = row.getAttribute('data-fullname') || '';
+                const ip = row.getAttribute('data-ip') || '';
+                
+                if (username.includes(query) || fullname.includes(query) || ip.includes(query)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+    }
+
+    // Checkbox and selection management
+    const selectAllCheckbox = document.getElementById('selectAllSessions');
+    const sessionCheckboxes = document.querySelectorAll('.session-checkbox');
+    const btnTerminateSelected = document.getElementById('btnTerminateSelected');
+    const selectedCountSpan = document.getElementById('selectedCount');
+    const bulkSessionForm = document.getElementById('bulkSessionForm');
+    const bulkActionInput = document.getElementById('bulkActionInput');
+
+    function updateSelectedCount() {
+        const checkedCount = document.querySelectorAll('.session-checkbox:checked').length;
+        if (selectedCountSpan) {
+            selectedCountSpan.textContent = checkedCount;
         }
+        if (btnTerminateSelected) {
+            btnTerminateSelected.disabled = checkedCount === 0;
+        }
+    }
 
-        document.querySelectorAll('.reset-pwd-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                openResetPasswordModal(this.dataset.userId, this.dataset.username);
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            sessionCheckboxes.forEach(cb => {
+                // Only toggle if the row is visible
+                const row = cb.closest('tr');
+                if (row && row.style.display !== 'none') {
+                    cb.checked = this.checked;
+                }
             });
+            updateSelectedCount();
         });
+    }
 
-        // Test SMTP connection logic
-        document.getElementById('btn-send-test-email').addEventListener('click', function() {
-            const recipient = document.getElementById('test_recipient').value.trim();
-            if (!recipient) {
-                const alertDiv = document.getElementById('test-smtp-alert');
-                alertDiv.className = 'alert alert-danger';
-                alertDiv.innerText = 'Please enter a recipient email address.';
-                alertDiv.classList.remove('d-none');
-                return;
+    sessionCheckboxes.forEach(cb => {
+        cb.addEventListener('change', updateSelectedCount);
+    });
+
+    // Bulk Terminate Selected Action
+    const btnTerminateSelectedEl = document.getElementById('btnTerminateSelected');
+    if (btnTerminateSelectedEl) {
+        btnTerminateSelectedEl.addEventListener('click', function() {
+            const checkedCount = document.querySelectorAll('.session-checkbox:checked').length;
+            if (confirm(`Are you sure you want to terminate the ${checkedCount} selected session(s)?`)) {
+                if (bulkActionInput && bulkSessionForm) {
+                    bulkActionInput.value = 'delete_selected';
+                    bulkSessionForm.submit();
+                }
             }
-
-            // Gather inputs from the form
-            const host = document.getElementById('host').value;
-            const port = document.getElementById('port').value;
-            const use_tls = document.getElementById('use_tls').checked;
-            const host_user = document.getElementById('host_user').value;
-            const from_address = document.getElementById('from_address').value;
-            const host_password = document.getElementById('host_password').value;
-
-            // UI feedback
-            const spinner = document.getElementById('test-smtp-spinner');
-            const planeIcon = document.getElementById('test-smtp-plane-icon');
-            const btn = document.getElementById('btn-send-test-email');
-            const alertDiv = document.getElementById('test-smtp-alert');
-            
-            spinner.classList.remove('d-none');
-            planeIcon.classList.add('d-none');
-            btn.disabled = true;
-            alertDiv.classList.add('d-none');
-
-            // Send AJAX POST
-            fetch("{% url 'admin_test_smtp' %}", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                body: JSON.stringify({
-                    host: host,
-                    port: port,
-                    use_tls: use_tls,
-                    host_user: host_user,
-                    from_address: from_address,
-                    host_password: host_password,
-                    test_recipient: recipient
-                })
-            })
-            .then(response => {
-                return response.json().then(data => {
-                    if (!response.ok) {
-                        throw new Error(data.message || 'Error occurred while testing.');
-                    }
-                    return data;
-                });
-            })
-            .then(data => {
-                alertDiv.className = 'alert alert-success';
-                alertDiv.innerHTML = `<i class="bi bi-check-circle-fill me-2"></i> ${data.message}`;
-                alertDiv.classList.remove('d-none');
-            })
-            .catch(error => {
-                alertDiv.className = 'alert alert-danger';
-                alertDiv.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-2"></i> ${error.message}`;
-                alertDiv.classList.remove('d-none');
-            })
-            .finally(() => {
-                spinner.classList.add('d-none');
-                planeIcon.classList.remove('d-none');
-                btn.disabled = false;
-            });
         });
-    </script>
-</body>
-</html>
+    }
+
+    // Terminate Inactive SDK Action
+    const btnTerminateInactiveSDKEl = document.getElementById('btnTerminateInactiveSDK');
+    if (btnTerminateInactiveSDKEl) {
+        btnTerminateInactiveSDKEl.addEventListener('click', function() {
+            if (confirm('Are you sure you want to terminate ALL sessions where SDK is Inactive? This will log out the users from those browsers.')) {
+                if (bulkActionInput && bulkSessionForm) {
+                    bulkActionInput.value = 'delete_inactive_sdk';
+                    bulkSessionForm.submit();
+                }
+            }
+        });
+    }
+
+    // Terminate All Others Action
+    const btnTerminateAllOthersEl = document.getElementById('btnTerminateAllOthers');
+    if (btnTerminateAllOthersEl) {
+        btnTerminateAllOthersEl.addEventListener('click', function() {
+            if (confirm('Are you sure you want to terminate ALL sessions except your current session? This will log out all other active users immediately.')) {
+                if (bulkActionInput && bulkSessionForm) {
+                    bulkActionInput.value = 'delete_all_except_current';
+                    bulkSessionForm.submit();
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
+{% endblock %}

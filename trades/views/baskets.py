@@ -1,9 +1,9 @@
 from django.http import JsonResponse
 from django.db.models import Max
 from django.db import transaction
-from .models import BasketOrder
-from .decorators import ajax_login_required
-from .kotak_neo_api import KotakNeoAPI
+from ..models import BasketOrder
+from ..decorators import ajax_login_required
+from ..kotak_neo_api import KotakNeoAPI
 import json
 import logging
 import re
@@ -76,29 +76,27 @@ def get_basket_ajax(request):
     basket_data = []
     
     if orders.exists():
-        # Get metadata for all tokens in basket from SQLite scrip cache
-        from django.db import connections
+        # Get metadata for all tokens in basket from SQLite scrip cache using Django ORM
+        from ..models import ActiveMarketData
         tokens = [o.instrument_token for o in orders]
-        placeholders = ", ".join(["?" for _ in tokens])
         
         try:
-            connection = connections['scrip_cache']
-            with connection.cursor() as cursor:
-                cursor.execute(f"""
-                    SELECT CAST(pSymbol AS TEXT) as pSymbol, pSymbolName, pTrdSymbol, pInstType, pDesc, 
-                    CAST(COALESCE(dTickSize, 0) AS REAL) / 100 as dTickSize, lLotSize, pScripRefKey, pOptionType,
-                    CAST(COALESCE(dStrikePrice, 0) AS REAL) / 100 as dStrikePrice
-                    FROM active_market_data 
-                    WHERE CAST(pSymbol AS TEXT) IN ({placeholders})
-                """, tokens)
-                columns = [col[0] for col in cursor.description]
-                metadata = {}
-                for row in cursor.fetchall():
-                    row_dict = dict(zip(columns, row))
-                    pSymbol = row_dict.pop('pSymbol')
-                    metadata[pSymbol] = row_dict
+            results = ActiveMarketData.objects.filter(symbol__in=tokens)
+            metadata = {}
+            for scrip in results:
+                metadata[scrip.symbol] = {
+                    'pSymbolName': scrip.symbol_name,
+                    'pTrdSymbol': scrip.trd_symbol,
+                    'pInstType': scrip.inst_type,
+                    'pDesc': scrip.desc,
+                    'dTickSize': float(scrip.tick_size or 0.0) / 100,
+                    'lLotSize': int(scrip.lot_size or 0),
+                    'pScripRefKey': scrip.scrip_ref_key,
+                    'pOptionType': scrip.option_type,
+                    'dStrikePrice': float(scrip.strike_price or 0.0) / 100
+                }
         except Exception as e:
-            logger.error(f"SQLite error in get_basket: {e}")
+            logger.error(f"ORM error in get_basket: {e}")
             metadata = {}
 
         # Fetch real-time circuit limits if SDK is active
@@ -359,29 +357,23 @@ def reorder_basket_ajax(request):
     if not orders:
         return JsonResponse({'status': 'success', 'message': 'Basket is empty.'})
 
-    # Fetch metadata for sorting (expiry, strike, etc.)
-    from django.db import connections
+    # Fetch metadata for sorting (expiry, strike, etc.) using Django ORM
+    from ..models import ActiveMarketData
     tokens = [o.instrument_token for o in orders]
-    placeholders = ", ".join(["?" for _ in tokens])
     
     try:
-        connection = connections['scrip_cache']
-        with connection.cursor() as cursor:
-            cursor.execute(f"""
-                SELECT CAST(pSymbol AS TEXT) as pSymbol, pScripRefKey, pSymbolName, pOptionType,
-                CAST(COALESCE(dStrikePrice, 0) AS REAL) / 100 as dStrikePrice,
-                expire_date
-                FROM active_market_data 
-                WHERE CAST(pSymbol AS TEXT) IN ({placeholders})
-            """, tokens)
-            columns = [col[0] for col in cursor.description]
-            metadata = {}
-            for row in cursor.fetchall():
-                row_dict = dict(zip(columns, row))
-                pSymbol = row_dict.pop('pSymbol')
-                metadata[pSymbol] = row_dict
+        results = ActiveMarketData.objects.filter(symbol__in=tokens)
+        metadata = {}
+        for scrip in results:
+            metadata[scrip.symbol] = {
+                'pScripRefKey': scrip.scrip_ref_key,
+                'pSymbolName': scrip.symbol_name,
+                'pOptionType': scrip.option_type,
+                'dStrikePrice': float(scrip.strike_price or 0.0) / 100,
+                'expire_date': scrip.expire_date
+            }
     except Exception as e:
-        logger.error(f"SQLite error in reorder_basket: {e}")
+        logger.error(f"ORM error in reorder_basket: {e}")
         metadata = {}
 
     def sort_key(order):

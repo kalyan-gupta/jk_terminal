@@ -8,7 +8,7 @@ https://docs.djangoproject.com/en/5.0/howto/deployment/asgi/
 """
 
 import os
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'trading_platform.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
@@ -21,7 +21,13 @@ from django.core.asgi import get_asgi_application
 # is populated before importing code that may import ORM models.
 django_asgi_app = get_asgi_application()
 
+from django.contrib.staticfiles.handlers import ASGIStaticFilesHandler
 from trades import routing
+
+class ForceASGIStaticFilesHandler(ASGIStaticFilesHandler):
+    def __init__(self, application):
+        super().__init__(application)
+        self.insecure_serving = True
 
 application = ProtocolTypeRouter({
     "http": django_asgi_app,
@@ -31,3 +37,6 @@ application = ProtocolTypeRouter({
         )
     ),
 })
+
+application = ForceASGIStaticFilesHandler(application)
+

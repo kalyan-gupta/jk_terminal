@@ -1,11 +1,9 @@
 import time
 import uuid
 import logging
-from trading_platform.logging_utils import request_id_var, request_user_var
+from config.logging_utils import request_id_var, request_user_var
 
-logger = logging.getLogger('trading_platform.requests')
-
-logger = logging.getLogger('trading_platform.requests')
+logger = logging.getLogger('config.requests')
 
 class RequestLoggingMiddleware:
     """
