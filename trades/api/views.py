@@ -23,20 +23,29 @@ logger = logging.getLogger(__name__)
 def get_api_session_id(user):
     return f"api_{user.username}"
 
-def get_or_create_session_activity(user, session_id):
+def get_or_create_session_activity(user, session_id, request=None):
+    ip_address = '0.0.0.0'
+    if request:
+        from .permissions import IsSessionValidAndPasswordChangeNotRequired
+        ip_address = IsSessionValidAndPasswordChangeNotRequired.get_client_ip(request)
+        
     activity, created = SessionActivity.objects.get_or_create(
         user=user,
         session_key=session_id,
-        defaults={'ip_address': '0.0.0.0'}
+        defaults={'ip_address': ip_address}
     )
     if not created:
         activity.last_activity = timezone.now()
-        activity.save(update_fields=['last_activity'])
+        if request and ip_address != '0.0.0.0':
+            activity.ip_address = ip_address
+            activity.save(update_fields=['last_activity', 'ip_address'])
+        else:
+            activity.save(update_fields=['last_activity'])
     return activity
 
-def get_neo_api_instance(user):
+def get_neo_api_instance(user, request=None):
     session_id = get_api_session_id(user)
-    get_or_create_session_activity(user, session_id)
+    get_or_create_session_activity(user, session_id, request=request)
     return KotakNeoAPI(user=user, session_id=session_id)
 
 
