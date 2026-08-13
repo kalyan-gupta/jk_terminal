@@ -71,6 +71,8 @@ class LiveQuotesConsumer(WebsocketConsumer):
 
         try:
             session_key = self.scope.get('session').session_key if self.scope.get('session') else None
+            if not session_key:
+                session_key = self.scope.get('api_session_key')
             self.api = KotakNeoAPI(user=user, session_id=session_key)
             self.ws_group_key = f"{self.user_id}_{session_key}"
         except Exception as e:
