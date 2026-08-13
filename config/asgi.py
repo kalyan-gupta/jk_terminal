@@ -29,9 +29,11 @@ class ForceASGIStaticFilesHandler(ASGIStaticFilesHandler):
         super().__init__(application)
         self.insecure_serving = True
 
+from trades.api.middleware import TokenAuthOrSessionAuthMiddleware
+
 application = ProtocolTypeRouter({
     "http": django_asgi_app,
-    "websocket": AuthMiddlewareStack(
+    "websocket": TokenAuthOrSessionAuthMiddleware(
         URLRouter(
             routing.websocket_urlpatterns
         )
@@ -39,4 +41,5 @@ application = ProtocolTypeRouter({
 })
 
 application = ForceASGIStaticFilesHandler(application)
+
 

@@ -211,3 +211,87 @@ class TrackedOrderTestCase(TestCase):
         tracked = TrackedOrder.objects.get(order_id='260802999999')
         self.assertEqual(tracked.quantity, 15)
         self.assertEqual(tracked.price, 2450.0)
+
+
+class RESTAPISecurityTestCase(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import User
+        from trades.models import UserSecurity, PlatformSettings
+        from rest_framework.test import APIRequestFactory
+        
+        User.objects.filter(username='api_test_user').delete()
+        self.user = User.objects.create_user(username='api_test_user', password='password123')
+        self.security, _ = UserSecurity.objects.get_or_create(user=self.user)
+        self.security.force_password_change = False
+        self.security.save()
+        
+        # Clean up and ensure PlatformSettings is configured
+        PlatformSettings.objects.all().delete()
+        self.platform_settings = PlatformSettings.objects.create(
+            session_timeout_enabled=True,
+            session_timeout_seconds=300
+        )
+        
+        from trades.api.permissions import IsSessionValidAndPasswordChangeNotRequired
+        self.permission = IsSessionValidAndPasswordChangeNotRequired()
+        self.factory = APIRequestFactory()
+
+    def test_permission_granted_for_valid_active_session(self):
+        from django.utils import timezone
+        from trades.models import SessionActivity
+        
+        # Clean up any existing activity for test user
+        SessionActivity.objects.filter(user=self.user).delete()
+        
+        # Setup SessionActivity that is active (not expired)
+        SessionActivity.objects.create(
+            user=self.user,
+            session_key=f"api_{self.user.username}",
+            last_activity=timezone.now()
+        )
+        
+        request = self.factory.get('/api/profile/')
+        request.user = self.user
+        
+        # Permission should be granted
+        self.assertTrue(self.permission.has_permission(request, None))
+
+    def test_permission_denied_when_force_password_change_true(self):
+        from rest_framework.exceptions import PermissionDenied
+        
+        self.security.force_password_change = True
+        self.security.save()
+        
+        request = self.factory.get('/api/profile/')
+        request.user = self.user
+        
+        with self.assertRaises(PermissionDenied) as ctx:
+            self.permission.has_permission(request, None)
+            
+        self.assertEqual(ctx.exception.detail.get('code'), 'password_change_required')
+
+    def test_permission_denied_when_session_expired(self):
+        from django.utils import timezone
+        from rest_framework.exceptions import AuthenticationFailed
+        from trades.models import SessionActivity
+        
+        # Clean up any existing activity for test user
+        SessionActivity.objects.filter(user=self.user).delete()
+        
+        # Setup SessionActivity that is expired
+        activity = SessionActivity.objects.create(
+            user=self.user,
+            session_key=f"api_{self.user.username}"
+        )
+        SessionActivity.objects.filter(id=activity.id).update(
+            last_activity=timezone.now() - timezone.timedelta(seconds=600)
+        )
+        
+        request = self.factory.get('/api/profile/')
+        request.user = self.user
+        
+        with self.assertRaises(AuthenticationFailed) as ctx:
+            self.permission.has_permission(request, None)
+            
+        self.assertEqual(ctx.exception.detail.get('error'), 'Session expired')
+

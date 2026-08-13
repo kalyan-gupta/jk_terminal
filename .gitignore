@@ -27,3 +27,4 @@ staticfiles/
 reference.txt
 docs-site/*
 *.sqlite3
+android_api_spec.md
