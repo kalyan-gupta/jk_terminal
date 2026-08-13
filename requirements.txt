@@ -16,4 +16,6 @@ cryptography
 websocket-client>=1.6.0
 pandas
 
-
+# REST API Framework
+djangorestframework
+djangorestframework-simplejwt
