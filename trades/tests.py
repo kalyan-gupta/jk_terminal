@@ -295,3 +295,50 @@ class RESTAPISecurityTestCase(TestCase):
             
         self.assertEqual(ctx.exception.detail.get('error'), 'Session expired')
 
+    @patch('trades.models.ActiveMarketData.objects.exists')
+    @patch('trades.models.ActiveMarketData.objects.raw')
+    def test_market_search_cache_api(self, mock_raw, mock_exists):
+        mock_exists.return_value = True
+        
+        from trades.api.views import MarketSearchAPIView
+        from rest_framework import status
+        
+        # Mock raw SQL query return value
+        mock_scrip = MagicMock()
+        mock_scrip.symbol = "12345"
+        mock_scrip.exch_seg = "nse_cm"
+        mock_scrip.symbol_name = "TCS"
+        mock_scrip.trd_symbol = "TCS-EQ"
+        mock_scrip.option_type = None
+        mock_scrip.inst_type = None
+        mock_scrip.strike_price = 0
+        mock_scrip.scrip_ref_key = "TCS"
+        mock_scrip.desc = "TATA CONSULTANCY SERVICES"
+        mock_scrip.group = ""
+        mock_scrip.asset_code = ""
+        mock_scrip.has_option_chain = False
+        mock_scrip.tick_size = 5
+        mock_scrip.lot_size = 1
+        
+        mock_raw.return_value = [mock_scrip]
+        
+        # Perform view test
+        from rest_framework.test import force_authenticate
+        view = MarketSearchAPIView.as_view()
+        request = self.factory.get('/api/v1/market/search/?q=tcs')
+        force_authenticate(request, user=self.user)
+        
+        # Setup active session activity to pass permission check
+        from trades.models import SessionActivity
+        SessionActivity.objects.update_or_create(
+            user=self.user,
+            session_key=f"api_{self.user.username}"
+        )
+        
+        response = view(request)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('results', response.data)
+        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(response.data['results'][0]['pSymbolName'], 'TCS')
+
+
