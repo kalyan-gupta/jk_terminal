@@ -390,12 +390,21 @@ class ExecuteBasketAPIView(APIView):
 class MarketSearchAPIView(APIView):
     def get(self, request):
         query = request.query_params.get('q', '')
+        exchange = request.query_params.get('exchange', 'all')
+        inst_type = request.query_params.get('inst_type', 'all')
         if not query:
             return Response({'error': 'Search query parameter "q" is required.'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Use existing logic from view helper
-        results = _check_scrip_status_logic(query)
-        return Response({'results': results})
+        from ..views.market import perform_market_search_cache
+        data, err = perform_market_search_cache(query, exchange, inst_type)
+        if err:
+            return Response({'error': err}, status=status.HTTP_400_BAD_REQUEST)
+            
+        return Response({
+            'results': data,
+            'count': len(data),
+            'total_available': min(50, len(data))
+        })
 
 
 class LTPAPIView(APIView):
