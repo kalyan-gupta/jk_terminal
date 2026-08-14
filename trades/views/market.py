@@ -322,6 +322,150 @@ def refresh_scrip_cache(request):
             return JsonResponse({'status': 'error', 'message': message}, status=500)
 
 
+def perform_market_search_cache(search_term, exchange='all', inst_type='all'):
+    """
+    Core search logic for active_market_data.
+    Returns: (list of dicts, error_message)
+    """
+    from ..models import ActiveMarketData
+    search_term = search_term.strip()
+    if not search_term or len(search_term) < 2:
+        return None, 'Search term must be at least 2 characters.'
+
+    try:
+        if not ActiveMarketData.objects.exists():
+            return None, 'Scrip cache is empty. Please refresh the scrip cache and try again.'
+    except Exception:
+        return None, 'Scrip cache table not found. Please refresh the scrip cache and try again.'
+
+    # Build filter conditions
+    filters = []
+    params = []
+    if exchange != 'all':
+        filters.append("pExchSeg = ?")
+        params.append(exchange)
+
+    if inst_type != 'all':
+        if inst_type == 'stock':
+            filters.append("(pInstType IS NULL OR pInstType = '')")
+        elif inst_type == 'option':
+            filters.append("(pInstType IN ('OPTSTK', 'OPTIDX'))")
+        elif inst_type == 'future':
+            filters.append("(pInstType IN ('FUTIDX', 'FUTSTK'))")
+
+    where_clause = " AND ".join(filters) if filters else "1=1"
+
+    # Build elastic search: make it tighter by requiring more matches
+    search_terms = search_term.lower().split()
+    
+    # Build conditions for options/futures: search only in pScripRefKey (AND logic)
+    fno_conditions = []
+    fno_params = []
+    for term in search_terms:
+        fno_conditions.append("LOWER(COALESCE(pScripRefKey, '')) LIKE ?")
+        fno_params.append(f"%{term}%")
+    fno_search = " AND ".join(fno_conditions) if fno_conditions else "1=1"
+    
+    # Build conditions for stocks: search in pScripRefKey OR pDesc (OR logic for terms)
+    stock_conditions = []
+    stock_params = []
+    for term in search_terms:
+        stock_conditions.append(
+            "(LOWER(COALESCE(pScripRefKey, '')) LIKE ? OR LOWER(COALESCE(pDesc, '')) LIKE ?)"
+        )
+        stock_params.append(f"%{term}%")
+        stock_params.append(f"%{term}%")
+    stock_search = " OR ".join(stock_conditions) if stock_conditions else "1=1"
+    
+    # Combine: prioritize F&O search if looking for options/futures or when exchange is F&O, otherwise use stock search
+    if inst_type in ('option', 'future') or exchange in ('nse_fo', 'bse_fo'):
+        final_search = f"({fno_search})"
+        params.extend(fno_params)
+    else:
+        # For stocks or non-F&O search, use stock search (looser)
+        final_search = f"({stock_search})"
+        params.extend(stock_params)
+
+    first_term = search_terms[0] if search_terms else ''
+    first_term_pat = f"{first_term}%"
+    params.append(first_term_pat)
+    params.append(first_term_pat)
+    
+    # Check if user likely wants F&O based on month abbreviations in search
+    months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+    has_date_term = any(m in term for term in search_terms for m in months)
+    wants_fo = inst_type in ('option', 'future') or exchange in ('nse_fo', 'bse_fo') or has_date_term
+    
+    stock_priority_clause = "expire_date IS NOT NULL ASC," if not wants_fo else ""
+    
+    order_by_clause = f"""
+        ORDER BY 
+            -- 1. Exact prefix match gets top priority
+            CASE 
+                WHEN LOWER(COALESCE(pSymbolName, '')) LIKE ? THEN 0 
+                WHEN LOWER(COALESCE(pScripRefKey, '')) LIKE ? THEN 1
+                ELSE 2 
+            END ASC,
+            -- 2. Equity prioritization if no FO intent
+            {stock_priority_clause}
+            -- 3. Sort by Nearest Expiry Date (Options/Futures)
+            expire_date ASC NULLS LAST,
+            -- 4. Strike price sorting (closest to 0 or sequential)
+            dStrikePrice ASC,
+            -- 5. Finally alphabetical
+            pSymbolName ASC,
+            pScripRefKey ASC
+    """
+
+    query = f"""
+        SELECT 
+            pSymbol,
+            pExchSeg,
+            pSymbolName,
+            pTrdSymbol,
+            pOptionType,
+            pInstType,
+            CAST(COALESCE(dStrikePrice, 0) AS REAL) / 100 as dStrikePrice,
+            pScripRefKey,
+            pDesc,
+            COALESCE(pGroup, '') as pGroup,
+            COALESCE(CAST(pAssetCode AS TEXT), '') as pAssetCode,
+            has_option_chain,
+            CAST(COALESCE(dTickSize, 0) AS REAL) / 100 as dTickSize,
+            CAST(COALESCE(lLotSize, 0) AS INTEGER) as lLotSize
+        FROM active_market_data
+        WHERE {where_clause} AND {final_search}
+        {order_by_clause}
+        LIMIT 50
+    """
+
+    results = ActiveMarketData.objects.raw(query, params)
+    data = []
+    for scrip in results:
+        data.append({
+            'pSymbol': scrip.symbol,
+            'pExchSeg': scrip.exch_seg,
+            'pSymbolName': scrip.symbol_name,
+            'pTrdSymbol': scrip.trd_symbol,
+            'pOptionType': scrip.option_type,
+            'pInstType': scrip.inst_type,
+            'dStrikePrice': float(scrip.strike_price or 0.0),
+            'pScripRefKey': scrip.scrip_ref_key,
+            'pDesc': scrip.desc,
+            'pGroup': scrip.group or '',
+            'pAssetCode': scrip.asset_code or '',
+            'has_option_chain': scrip.has_option_chain,
+            'dTickSize': float(scrip.tick_size or 0.0),
+            'lLotSize': int(scrip.lot_size or 0)
+        })
+    
+    # Add pGroup description
+    for item in data:
+        item['pGroupDesc'] = get_p_group_description(item.get('pExchSeg'), item.get('pGroup'))
+    
+    return data, None
+
+
 @login_required_with_session_check
 def search_scrip_cache(request):
     if request.method != 'GET':
@@ -329,158 +473,20 @@ def search_scrip_cache(request):
 
     try:
         search_term = request.GET.get('q', '').strip()
-        exchange = request.GET.get('exchange', 'all')  # all, nse_cm, bse_cm, nse_fo, bse_fo
-        inst_type = request.GET.get('inst_type', 'all')  # all, stock, option, future
+        exchange = request.GET.get('exchange', 'all')
+        inst_type = request.GET.get('inst_type', 'all')
 
-        if not search_term or len(search_term) < 2:
-            return JsonResponse({'error': 'Search term must be at least 2 characters.'}, status=400)
+        data, err = perform_market_search_cache(search_term, exchange, inst_type)
+        if err:
+            return JsonResponse({'error': err}, status=400)
 
-        try:
-            if not ActiveMarketData.objects.exists():
-                return JsonResponse({
-                    'error': 'Scrip cache is empty. Please refresh the scrip cache and try again.',
-                    'action': 'refresh_cache'
-                }, status=400)
-        except Exception:
-            return JsonResponse({
-                'error': 'Scrip cache table not found. Please refresh the scrip cache and try again.',
-                'action': 'refresh_cache'
-            }, status=400)
-
-        # Build filter conditions
-        filters = []
-        params = []
-        if exchange != 'all':
-            filters.append("pExchSeg = ?")
-            params.append(exchange)
-
-        if inst_type != 'all':
-            if inst_type == 'stock':
-                filters.append("(pInstType IS NULL OR pInstType = '')")
-            elif inst_type == 'option':
-                filters.append("(pInstType IN ('OPTSTK', 'OPTIDX'))")
-            elif inst_type == 'future':
-                filters.append("(pInstType IN ('FUTIDX', 'FUTSTK'))")
-
-        where_clause = " AND ".join(filters) if filters else "1=1"
-
-        # Build elastic search: make it tighter by requiring more matches
-        search_terms = search_term.lower().split()
-        
-        # Build conditions for options/futures: search only in pScripRefKey (AND logic)
-        fno_conditions = []
-        fno_params = []
-        for term in search_terms:
-            fno_conditions.append("LOWER(COALESCE(pScripRefKey, '')) LIKE ?")
-            fno_params.append(f"%{term}%")
-        fno_search = " AND ".join(fno_conditions) if fno_conditions else "1=1"
-        
-        # Build conditions for stocks: search in pScripRefKey OR pDesc (OR logic for terms)
-        stock_conditions = []
-        stock_params = []
-        for term in search_terms:
-            stock_conditions.append(
-                "(LOWER(COALESCE(pScripRefKey, '')) LIKE ? OR LOWER(COALESCE(pDesc, '')) LIKE ?)"
-            )
-            stock_params.append(f"%{term}%")
-            stock_params.append(f"%{term}%")
-        stock_search = " OR ".join(stock_conditions) if stock_conditions else "1=1"
-        
-        # Combine: prioritize F&O search if looking for options/futures or when exchange is F&O, otherwise use stock search
-        if inst_type in ('option', 'future') or exchange in ('nse_fo', 'bse_fo'):
-            final_search = f"({fno_search})"
-            params.extend(fno_params)
-        else:
-            # For stocks or non-F&O search, use stock search (looser)
-            final_search = f"({stock_search})"
-            params.extend(stock_params)
-
-        first_term = search_terms[0] if search_terms else ''
-        first_term_pat = f"{first_term}%"
-        params.append(first_term_pat)
-        params.append(first_term_pat)
-        
-        # Check if user likely wants F&O based on month abbreviations in search
-        months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
-        has_date_term = any(m in term for term in search_terms for m in months)
-        wants_fo = inst_type in ('option', 'future') or exchange in ('nse_fo', 'bse_fo') or has_date_term
-        
-        stock_priority_clause = "expire_date IS NOT NULL ASC," if not wants_fo else ""
-        
-        order_by_clause = f"""
-            ORDER BY 
-                -- 1. Exact prefix match gets top priority
-                CASE 
-                    WHEN LOWER(COALESCE(pSymbolName, '')) LIKE ? THEN 0 
-                    WHEN LOWER(COALESCE(pScripRefKey, '')) LIKE ? THEN 1
-                    ELSE 2 
-                END ASC,
-                -- 2. Equity prioritization if no FO intent
-                {stock_priority_clause}
-                -- 3. Sort by Nearest Expiry Date (Options/Futures)
-                expire_date ASC NULLS LAST,
-                -- 4. Strike price sorting (closest to 0 or sequential)
-                dStrikePrice ASC,
-                -- 5. Finally alphabetical
-                pSymbolName ASC,
-                pScripRefKey ASC
-        """
-
-        query = f"""
-            SELECT 
-                pSymbol,
-                pExchSeg,
-                pSymbolName,
-                pTrdSymbol,
-                pOptionType,
-                pInstType,
-                CAST(COALESCE(dStrikePrice, 0) AS REAL) / 100 as dStrikePrice,
-                pScripRefKey,
-                pDesc,
-                COALESCE(pGroup, '') as pGroup,
-                COALESCE(CAST(pAssetCode AS TEXT), '') as pAssetCode,
-                has_option_chain,
-                CAST(COALESCE(dTickSize, 0) AS REAL) / 100 as dTickSize,
-                CAST(COALESCE(lLotSize, 0) AS INTEGER) as lLotSize
-            FROM active_market_data
-            WHERE {where_clause} AND {final_search}
-            {order_by_clause}
-            LIMIT 50
-        """
-
-        results = ActiveMarketData.objects.raw(query, params)
-        data = []
-        for scrip in results:
-            data.append({
-                'pSymbol': scrip.symbol,
-                'pExchSeg': scrip.exch_seg,
-                'pSymbolName': scrip.symbol_name,
-                'pTrdSymbol': scrip.trd_symbol,
-                'pOptionType': scrip.option_type,
-                'pInstType': scrip.inst_type,
-                'dStrikePrice': float(scrip.strike_price or 0.0),
-                'pScripRefKey': scrip.scrip_ref_key,
-                'pDesc': scrip.desc,
-                'pGroup': scrip.group or '',
-                'pAssetCode': scrip.asset_code or '',
-                'has_option_chain': scrip.has_option_chain,
-                'dTickSize': float(scrip.tick_size or 0.0),
-                'lLotSize': int(scrip.lot_size or 0)
-            })
-        
-        # Add pGroup description
-        for item in data:
-            item['pGroupDesc'] = get_p_group_description(item.get('pExchSeg'), item.get('pGroup'))
-        
         logger.info(f"SQLite DB Scrip search execution for '{search_term}' using filters (exchange: {exchange}, inst_type: {inst_type}) returned {len(data)} results.")
-        
+
         return JsonResponse({
             'results': data,
             'count': len(data),
             'total_available': min(50, len(data))
         })
-
-
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
