@@ -28,6 +28,10 @@ class IsSessionValidAndPasswordChangeNotRequired(permissions.BasePermission):
         session_id = f"api_{request.user.username}"
         ip_address = self.get_client_ip(request)
         
+        # Check if the view is exempt from blocking on session inactivity
+        from trades.api.views import AuthenticateSDKAPIView, CheckSDKStatusAPIView, LogoutSDKAPIView
+        is_exempt_from_inactivity_block = isinstance(view, (AuthenticateSDKAPIView, CheckSDKStatusAPIView, LogoutSDKAPIView))
+        
         try:
             # Fetch existing session activity for the API
             activity = SessionActivity.objects.get(session_key=session_id)
@@ -36,14 +40,15 @@ class IsSessionValidAndPasswordChangeNotRequired(permissions.BasePermission):
             if activity.is_expired():
                 # Session expired, logout SDK session
                 logout_sdk_session_for_user(request.user)
-                # Raise AuthenticationFailed to trigger a 401 Unauthorized response
-                raise AuthenticationFailed({
-                    'error': 'Session expired',
-                    'expired': True,
-                    'reauth_required': True
-                }, code='session_expired')
+                if not is_exempt_from_inactivity_block:
+                    # Raise AuthenticationFailed to trigger a 401 Unauthorized response
+                    raise AuthenticationFailed({
+                        'error': 'Session expired',
+                        'expired': True,
+                        'reauth_required': True
+                    }, code='session_expired')
             
-            # If not expired, update last_activity and ip_address
+            # If not expired (or if exempt), update last_activity and ip_address
             activity.last_activity = timezone.now()
             activity.ip_address = ip_address
             activity.save(update_fields=['last_activity', 'ip_address'])
