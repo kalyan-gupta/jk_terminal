@@ -562,3 +562,15 @@ class ScripInfoAPIView(APIView):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+class RefreshScripMasterAPIView(APIView):
+    def get(self, request):
+        from ..views.market import refresh_scrip_master
+        return refresh_scrip_master(request)
+
+
+class RefreshScripCacheAPIView(APIView):
+    def get(self, request):
+        from ..views.market import refresh_scrip_cache
+        return refresh_scrip_cache(request)
+

@@ -7,7 +7,8 @@ from .views import (
     LogoutSDKAPIView, OrderBookAPIView, CheckMarginAPIView,
     HoldingsAPIView, PositionsAPIView, LimitsAPIView,
     BasketOrderViewSet, ExecuteBasketAPIView, MarketSearchAPIView, LTPAPIView,
-    DepthAPIView, OptionChainAPIView, ScripInfoAPIView
+    DepthAPIView, OptionChainAPIView, ScripInfoAPIView, RefreshScripMasterAPIView,
+    RefreshScripCacheAPIView
 )
 
 router = DefaultRouter()
@@ -48,5 +49,7 @@ urlpatterns = [
     path('market/depth/', DepthAPIView.as_view(), name='api_market_depth'),
     path('market/options/', OptionChainAPIView.as_view(), name='api_market_options'),
     path('market/scrip/', ScripInfoAPIView.as_view(), name='api_market_scrip'),
+    path('market/refresh-master/', RefreshScripMasterAPIView.as_view(), name='api_market_refresh_master'),
+    path('market/refresh-cache/', RefreshScripCacheAPIView.as_view(), name='api_market_refresh_cache'),
 ]
 
