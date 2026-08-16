@@ -286,7 +286,7 @@ def refresh_scrip_master(request):
                 return JsonResponse({'status': 'success', 'message': 'Scrip master files are already up-to-date.'})
 
         try:
-            session_id = getattr(request.session, 'session_key', None) or get_api_session_id(request.user)
+            session_id = getattr(request.session, 'session_key', None) or f"api_{request.user.username}"
             api = KotakNeoAPI(user=request.user, session_id=session_id)
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)

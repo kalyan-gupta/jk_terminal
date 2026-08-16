@@ -164,7 +164,7 @@ class OrderBookAPIView(APIView):
     def get(self, request):
         try:
             api = get_neo_api_instance(request.user)
-            orders_response = api.get_order_report()
+            orders_response = api.get_order_book()
             if isinstance(orders_response, dict) and 'error' in orders_response:
                 if 'One-time TOTP code is required' in orders_response['error']:
                     return Response({'error': 'Trade session expired.', 'status': 'reauth_required'}, status=status.HTTP_401_UNAUTHORIZED)
