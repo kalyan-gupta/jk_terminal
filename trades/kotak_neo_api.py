@@ -48,7 +48,7 @@ class DirectNeoClient:
             "ucc": ucc,
             "totp": totp
         }
-        response = self.session.post(url, headers=headers, json=payload)
+        response = self.session.post(url, headers=headers, json=payload, timeout=30)
         try:
             data = response.json()
         except Exception:
@@ -68,7 +68,7 @@ class DirectNeoClient:
         }
         url = "https://mis.kotaksecurities.com/login/1.0/tradeApiValidate"
         payload = {"mpin": mpin}
-        response = self.session.post(url, headers=headers, json=payload)
+        response = self.session.post(url, headers=headers, json=payload, timeout=30)
         try:
             data = response.json()
         except Exception:
@@ -82,7 +82,7 @@ class DirectNeoClient:
             self.baseUrl = data.get("data", {}).get("baseUrl")
         return data
 
-    def request(self, method, path, query_params=None, body_params=None, urlencoded=False):
+    def request(self, method, path, query_params=None, body_params=None, urlencoded=False, timeout=30):
         url = f"{self.baseUrl.rstrip('/')}/{path.lstrip('/')}"
         if query_params:
             url = f"{url}?{urllib.parse.urlencode(query_params)}"
@@ -96,10 +96,10 @@ class DirectNeoClient:
             payload = {}
             if body_params:
                 payload["jData"] = json.dumps(body_params)
-            response = self.session.post(url, headers=headers, data=payload)
+            response = self.session.post(url, headers=headers, data=payload, timeout=timeout)
         else:
             headers["Content-Type"] = "application/json"
-            response = self.session.request(method, url, headers=headers, json=body_params)
+            response = self.session.request(method, url, headers=headers, json=body_params, timeout=timeout)
         
         try:
             return response.json()
@@ -207,7 +207,7 @@ class DirectNeoClient:
             "Content-Type": "application/json"
         }
         url = f"{self.baseUrl.rstrip('/')}/script-details/1.0/quotes/neosymbol/{encoded_neo_symbol_str}/{quote_type}"
-        response = self.session.get(url, headers=headers)
+        response = self.session.get(url, headers=headers, timeout=30)
         try:
             return response.json()
         except Exception:
@@ -219,7 +219,7 @@ class DirectNeoClient:
             "Content-Type": "application/json"
         }
         url = f"{self.baseUrl.rstrip('/')}/script-details/1.0/masterscrip/file-paths"
-        response = self.session.get(url, headers=headers)
+        response = self.session.get(url, headers=headers, timeout=30)
         try:
             data = response.json()
         except Exception:
@@ -247,7 +247,7 @@ class DirectNeoClient:
         if not isinstance(url, str):
             return {"message": "Exchange Segment is not available"}
         
-        response = requests.get(url)
+        response = requests.get(url, timeout=30)
         if response.status_code != 200:
             return {"message": "Failed to retrieve scrip master CSV"}
         
@@ -879,7 +879,7 @@ class KotakNeoAPI:
         downloaded_files = []
         for file_url in files_paths:
             try:
-                response = requests.get(file_url, stream=True)
+                response = requests.get(file_url, stream=True, timeout=30)
                 response.raise_for_status()
 
                 file_name = os.path.join(base_dir, file_url.split('/')[-1])
