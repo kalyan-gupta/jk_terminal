@@ -270,40 +270,53 @@ def ensure_scrip_cache():
 # ==================== Authentication Views ====================
 
 
-@login_required_with_session_check
+@ajax_login_required
 def refresh_scrip_master(request):
     force = request.GET.get('force', 'false').lower() == 'true'
-    with _scrip_refresh_lock:
+    
+    # Try to acquire lock without blocking to avoid hanging the request
+    acquired = _scrip_refresh_lock.acquire(blocking=False)
+    if not acquired:
+        return JsonResponse({'status': 'error', 'message': 'A refresh is already in progress. Please wait.'}, status=429)
+    
+    try:
         if not force:
-            # Double check if refresh is still needed (could have been completed by another concurrent request)
             status = _check_scrip_status_logic()
             if not status.get('needs_refresh') or status.get('reason') == 'Cache empty':
                 return JsonResponse({'status': 'success', 'message': 'Scrip master files are already up-to-date.'})
 
         try:
-            api = KotakNeoAPI(user=request.user, session_id=request.session.session_key)
+            session_id = getattr(request.session, 'session_key', None) or get_api_session_id(request.user)
+            api = KotakNeoAPI(user=request.user, session_id=session_id)
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
         
         try:
             result = api.download_scrip_master()
             if result.get('status') == 'success':
-                return JsonResponse({'status': 'success', 'message': f"Scrip master data downloaded successfully to {result.get('downloaded_files')}"})
+                return JsonResponse({'status': 'success', 'message': f"Scrip master data downloaded successfully."})
             else:
-                return JsonResponse({'status': 'error', 'message': result.get('error', 'An unknown error occurred.')})
+                return JsonResponse({'status': 'error', 'message': result.get('error', 'An unknown error occurred.')}, status=400)
         except Exception as e:
-            return JsonResponse({'status': 'error', 'message': str(e)})
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    finally:
+        _scrip_refresh_lock.release()
 
 
-@login_required_with_session_check
+@ajax_login_required
 def refresh_scrip_cache(request):
     if request.method != 'GET':
         return JsonResponse({'status': 'error', 'message': 'Only GET requests are allowed.'}, status=405)
 
     force = request.GET.get('force', 'false').lower() == 'true'
-    with _scrip_refresh_lock:
+    
+    # Try to acquire lock without blocking
+    acquired = _scrip_refresh_lock.acquire(blocking=False)
+    if not acquired:
+        return JsonResponse({'status': 'error', 'message': 'A refresh is already in progress. Please wait.'}, status=429)
+
+    try:
         if not force:
-            # Double check if cache update is still needed
             status = _check_scrip_status_logic()
             if not status.get('needs_refresh'):
                 try:
@@ -320,6 +333,8 @@ def refresh_scrip_cache(request):
             return JsonResponse({'status': 'success', 'message': message, 'row_count': row_count})
         else:
             return JsonResponse({'status': 'error', 'message': message}, status=500)
+    finally:
+        _scrip_refresh_lock.release()
 
 
 def perform_market_search_cache(search_term, exchange='all', inst_type='all'):

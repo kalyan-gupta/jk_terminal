@@ -35,29 +35,31 @@ def login_required_with_session_check(view_func):
             return redirect(reverse('login') + f'?next={request.path}')
         
         # Check session activity/expiry
-        try:
-            session_activity = SessionActivity.objects.get(session_key=request.session.session_key)
-            if session_activity.is_expired(): 
+        session_key = getattr(request.session, 'session_key', None)
+        if session_key:
+            try:
+                session_activity = SessionActivity.objects.get(session_key=session_key)
+                if session_activity.is_expired(): 
 
-                # Session expired
-                from trades.kotak_neo_api import logout_sdk_session_for_user
-                logout_sdk_session_for_user(request.user)
-                request.session.flush()
-                request.user = AnonymousUser()
-                logger.info(f"Session expired for user {session_activity.user.username} at {request.path}")
-                
-                if is_ajax(request):
-                    return JsonResponse({'error': 'Session expired', 'expired': True, 'reauth_required': True}, status=401)
-                return redirect(reverse('login') + '?expired=true' + f'&next={request.path}')
-        except SessionActivity.DoesNotExist:
-            # Create session activity record if it doesn't exist
-            SessionActivity.objects.create(
-                user=request.user,
-                session_key=request.session.session_key,
-                ip_address=get_client_ip(request)
-            )
-        except Exception as e:
-            logger.error(f"Error checking session activity: {e}")
+                    # Session expired
+                    from trades.kotak_neo_api import logout_sdk_session_for_user
+                    logout_sdk_session_for_user(request.user)
+                    request.session.flush()
+                    request.user = AnonymousUser()
+                    logger.info(f"Session expired for user {session_activity.user.username} at {request.path}")
+                    
+                    if is_ajax(request):
+                        return JsonResponse({'error': 'Session expired', 'expired': True, 'reauth_required': True}, status=401)
+                    return redirect(reverse('login') + '?expired=true' + f'&next={request.path}')
+            except SessionActivity.DoesNotExist:
+                # Create session activity record if it doesn't exist
+                SessionActivity.objects.create(
+                    user=request.user,
+                    session_key=session_key,
+                    ip_address=get_client_ip(request)
+                )
+            except Exception as e:
+                logger.error(f"Error checking session activity: {e}")
             
         # Check force password change
         if getattr(request.user, 'security', None) and request.user.security.force_password_change:
@@ -97,24 +99,25 @@ def ajax_login_required(view_func):
             return JsonResponse({'error': 'Authentication required'}, status=401)
         
         # Check session activity/expiry
-        try:
-            session_activity = SessionActivity.objects.get(session_key=request.session.session_key)
-            if session_activity.is_expired(): 
-
-                from trades.kotak_neo_api import logout_sdk_session_for_user
-                logout_sdk_session_for_user(request.user)
-                request.session.flush()
-                request.user = AnonymousUser()
-                return JsonResponse({'error': 'Session expired', 'expired': True}, status=401)
-        except SessionActivity.DoesNotExist:
-            SessionActivity.objects.create(
-                user=request.user,
-                session_key=request.session.session_key,
-                ip_address=get_client_ip(request)
-            )
-        except Exception as e:
-            logger.error(f"Error checking session activity: {e}")
-            
+        session_key = getattr(request.session, 'session_key', None)
+        if session_key:
+            try:
+                session_activity = SessionActivity.objects.get(session_key=session_key)
+                if session_activity.is_expired(): 
+                    from trades.kotak_neo_api import logout_sdk_session_for_user
+                    logout_sdk_session_for_user(request.user)
+                    request.session.flush()
+                    request.user = AnonymousUser()
+                    return JsonResponse({'error': 'Session expired', 'expired': True}, status=401)
+            except SessionActivity.DoesNotExist:
+                SessionActivity.objects.create(
+                    user=request.user,
+                    session_key=session_key,
+                    ip_address=get_client_ip(request)
+                )
+            except Exception as e:
+                logger.error(f"Error checking session activity: {e}")
+        
         # Check force password change
         if getattr(request.user, 'security', None) and request.user.security.force_password_change:
             allowed_paths = [reverse('set_new_password'), reverse('logout')]
